@@ -1,0 +1,568 @@
+import {
+  useEffect,
+  useMemo,
+  useState,
+  type ChangeEvent,
+} from 'react';
+import { useNavigate } from 'react-router-dom';
+import {
+  collection,
+  doc,
+  getDocs,
+  orderBy,
+  query,
+  updateDoc,
+} from 'firebase/firestore';
+import { AppShell } from '../components/layout/AppShell';
+import { db } from '../services/firebase/config';
+import { useAuth } from '../hooks/useAuth';
+import type { UserProfile, UserRole, UserStatus } from '../types/auth';
+import { getRoleLabel, getStatusLabel } from '../utils/authLabels';
+import { toast } from '../utils/toast';
+import {
+  neutralActionButtonClass,
+  positiveActionButtonClass,
+} from '../utils/buttonStyles';
+
+type UsersPageProps = {
+  isDarkMode: boolean;
+  onToggleTheme: () => void;
+};
+
+type StudentJobTitle =
+  | 'unassigned'
+  | 'general_manager'
+  | 'finance'
+  | 'sales'
+  | 'operations'
+  | 'hr';
+
+type UserProfileWithJob = UserProfile & {
+  jobTitle?: StudentJobTitle | null;
+};
+
+const adminRoleOptions: UserRole[] = ['student', 'professor', 'admin'];
+
+const studentJobOptions: StudentJobTitle[] = [
+  'unassigned',
+  'general_manager',
+  'finance',
+  'sales',
+  'operations',
+  'hr',
+];
+
+function isValidStudentJobTitle(value: unknown): value is StudentJobTitle {
+  return (
+    value === 'unassigned' ||
+    value === 'general_manager' ||
+    value === 'finance' ||
+    value === 'sales' ||
+    value === 'operations' ||
+    value === 'hr'
+  );
+}
+
+function getRoleBadgeClass(role: UserRole) {
+  switch (role) {
+    case 'admin':
+      return 'border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/40 dark:text-rose-300';
+    case 'professor':
+      return 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900/40 dark:bg-amber-950/40 dark:text-amber-300';
+    case 'student':
+    default:
+      return 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/40 dark:bg-emerald-950/40 dark:text-emerald-300';
+  }
+}
+
+function getStatusBadgeClass(status: UserStatus) {
+  switch (status) {
+    case 'active':
+      return 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/40 dark:bg-emerald-950/40 dark:text-emerald-300';
+    case 'inactive':
+      return 'border-slate-200 bg-slate-100 text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300';
+    case 'invited':
+    default:
+      return 'border-sky-200 bg-sky-50 text-sky-700 dark:border-sky-900/40 dark:bg-sky-950/40 dark:text-sky-300';
+  }
+}
+
+function getJobTitleLabel(jobTitle: StudentJobTitle | null | undefined) {
+  switch (jobTitle) {
+    case 'general_manager':
+      return 'Gerencia';
+    case 'finance':
+      return 'Finanzas';
+    case 'sales':
+      return 'Ventas';
+    case 'operations':
+      return 'Operaciones';
+    case 'hr':
+      return 'Recursos Humanos';
+    case 'unassigned':
+    default:
+      return 'Sin asignar';
+  }
+}
+
+function getJobTitleBadgeClass(jobTitle: StudentJobTitle | null | undefined) {
+  switch (jobTitle) {
+    case 'general_manager':
+      return 'border-violet-200 bg-violet-50 text-violet-700 dark:border-violet-900/40 dark:bg-violet-950/40 dark:text-violet-300';
+    case 'finance':
+      return 'border-sky-200 bg-sky-50 text-sky-700 dark:border-sky-900/40 dark:bg-sky-950/40 dark:text-sky-300';
+    case 'sales':
+      return 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/40 dark:bg-emerald-950/40 dark:text-emerald-300';
+    case 'operations':
+      return 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900/40 dark:bg-amber-950/40 dark:text-amber-300';
+    case 'hr':
+      return 'border-pink-200 bg-pink-50 text-pink-700 dark:border-pink-900/40 dark:bg-pink-950/40 dark:text-pink-300';
+    case 'unassigned':
+    default:
+      return 'border-slate-200 bg-slate-100 text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300';
+  }
+}
+
+export function UsersPage({
+  isDarkMode,
+  onToggleTheme,
+}: UsersPageProps) {
+  const navigate = useNavigate();
+  const { profile, signOutUser } = useAuth();
+
+  const [users, setUsers] = useState<UserProfileWithJob[]>([]);
+  const [isLoadingUsers, setIsLoadingUsers] = useState(true);
+
+  const [selectedUser, setSelectedUser] = useState<UserProfileWithJob | null>(null);
+  const [formRole, setFormRole] = useState<UserRole>('student');
+  const [formStatus, setFormStatus] = useState<UserStatus>('active');
+  const [formJobTitle, setFormJobTitle] = useState<StudentJobTitle>('unassigned');
+  const [isSaving, setIsSaving] = useState(false);
+
+  const canCurrentUserEditRoles = useMemo(() => {
+    return profile?.role === 'admin';
+  }, [profile?.role]);
+
+  const handleLogout = async () => {
+    await signOutUser();
+    toast.info('Sesión cerrada', 'Tu sesión fue cerrada correctamente.');
+    navigate('/login', { replace: true });
+  };
+
+  const handleOpenProfile = () => {
+    navigate('/profile');
+  };
+
+  const loadUsers = async () => {
+    try {
+      setIsLoadingUsers(true);
+
+      const usersRef = collection(db, 'users');
+      const usersQuery = query(usersRef, orderBy('firstName'));
+      const snapshot = await getDocs(usersQuery);
+
+      const nextUsers: UserProfileWithJob[] = snapshot.docs.map((document) => {
+        const data = document.data();
+        const normalizedRole: UserRole =
+          data.role === 'admin' ||
+          data.role === 'professor' ||
+          data.role === 'student'
+            ? data.role
+            : 'student';
+
+        const normalizedJobTitle: StudentJobTitle | null =
+          normalizedRole === 'student'
+            ? isValidStudentJobTitle(data.jobTitle)
+              ? data.jobTitle
+              : 'unassigned'
+            : null;
+
+        return {
+          uid: document.id,
+          firstName: data.firstName ?? '',
+          lastName: data.lastName ?? '',
+          email: data.email ?? '',
+          role: normalizedRole,
+          teamId: data.teamId ?? null,
+          status:
+            data.status === 'inactive' || data.status === 'invited'
+              ? data.status
+              : 'active',
+          jobTitle: normalizedJobTitle,
+        };
+      });
+
+      setUsers(nextUsers);
+    } catch {
+      toast.error(
+        'No se pudieron cargar los usuarios',
+        'Revisa las reglas de Firestore y la estructura de la colección users.'
+      );
+    } finally {
+      setIsLoadingUsers(false);
+    }
+  };
+
+  useEffect(() => {
+    void loadUsers();
+  }, []);
+
+  const canEditUser = (targetUser: UserProfileWithJob) => {
+    if (!profile) {
+      return false;
+    }
+
+    if (targetUser.uid === profile.uid) {
+      return false;
+    }
+
+    if (profile.role === 'admin') {
+      return true;
+    }
+
+    if (profile.role === 'professor') {
+      return targetUser.role === 'student';
+    }
+
+    return false;
+  };
+
+  const handleOpenEdit = (targetUser: UserProfileWithJob) => {
+    setSelectedUser(targetUser);
+    setFormRole(targetUser.role);
+    setFormStatus(targetUser.status);
+    setFormJobTitle(
+      targetUser.role === 'student'
+        ? targetUser.jobTitle ?? 'unassigned'
+        : 'unassigned'
+    );
+  };
+
+  const handleCloseEdit = () => {
+    if (isSaving) {
+      return;
+    }
+
+    setSelectedUser(null);
+  };
+
+  const handleSave = async () => {
+    if (!selectedUser || !profile) {
+      return;
+    }
+
+    const nextRole = profile.role === 'admin' ? formRole : selectedUser.role;
+    const nextStatus = formStatus;
+    const nextJobTitle = nextRole === 'student' ? formJobTitle : null;
+
+    try {
+      setIsSaving(true);
+
+      const userRef = doc(db, 'users', selectedUser.uid);
+
+      await updateDoc(userRef, {
+        role: nextRole,
+        status: nextStatus,
+        jobTitle: nextJobTitle,
+      });
+
+      setUsers((currentUsers) =>
+        currentUsers.map((user) =>
+          user.uid === selectedUser.uid
+            ? {
+                ...user,
+                role: nextRole,
+                status: nextStatus,
+                jobTitle: nextJobTitle,
+              }
+            : user
+        )
+      );
+
+      toast.success(
+        'Usuario actualizado',
+        'Los cambios se guardaron correctamente.'
+      );
+
+      setSelectedUser(null);
+    } catch {
+      toast.error(
+        'No se pudo actualizar el usuario',
+        'Verifica tus permisos y vuelve a intentarlo.'
+      );
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  return (
+    <>
+      <AppShell
+        title="Usuarios"
+        subtitle="Gestión de usuarios, roles, estado y puesto estudiantil."
+        isDarkMode={isDarkMode}
+        onToggleTheme={onToggleTheme}
+        onLogout={handleLogout}
+        onOpenProfile={handleOpenProfile}
+      >
+        <section className="rounded-3xl border border-[color:var(--app-border)] bg-[var(--app-surface)] p-6 shadow-sm">
+          <header className="mb-6">
+            <h2 className="text-lg font-semibold">Listado de usuarios</h2>
+            <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
+              Visualiza usuarios registrados y asigna su puesto de trabajo cuando
+              sean estudiantes.
+            </p>
+          </header>
+
+          {isLoadingUsers ? (
+            <div className="rounded-2xl border border-[color:var(--app-border)] bg-[var(--app-surface-muted)] p-6 text-sm text-slate-600 dark:text-slate-400">
+              Cargando usuarios...
+            </div>
+          ) : users.length === 0 ? (
+            <div className="rounded-2xl border border-[color:var(--app-border)] bg-[var(--app-surface-muted)] p-6 text-sm text-slate-600 dark:text-slate-400">
+              No hay usuarios registrados todavía.
+            </div>
+          ) : (
+            <div className="overflow-hidden rounded-2xl border border-[color:var(--app-border)]">
+              <div className="overflow-x-auto">
+                <table className="min-w-full border-collapse">
+                  <thead className="bg-[var(--app-surface-muted)]">
+                    <tr>
+                      <th className="px-4 py-4 text-left text-sm font-semibold text-slate-700 dark:text-slate-300">
+                        Nombre
+                      </th>
+                      <th className="px-4 py-4 text-left text-sm font-semibold text-slate-700 dark:text-slate-300">
+                        Correo
+                      </th>
+                      <th className="px-4 py-4 text-left text-sm font-semibold text-slate-700 dark:text-slate-300">
+                        Rol
+                      </th>
+                      <th className="px-4 py-4 text-left text-sm font-semibold text-slate-700 dark:text-slate-300">
+                        Puesto
+                      </th>
+                      <th className="px-4 py-4 text-left text-sm font-semibold text-slate-700 dark:text-slate-300">
+                        Estado
+                      </th>
+                      <th className="px-4 py-4 text-left text-sm font-semibold text-slate-700 dark:text-slate-300">
+                        Equipo
+                      </th>
+                      <th className="px-4 py-4 text-right text-sm font-semibold text-slate-700 dark:text-slate-300">
+                        Acción
+                      </th>
+                    </tr>
+                  </thead>
+
+                  <tbody>
+                    {users.map((user) => (
+                      <tr
+                        key={user.uid}
+                        className="border-t border-[color:var(--app-border)]"
+                      >
+                        <td className="px-4 py-4 text-sm text-[var(--app-fg)]">
+                          {user.firstName} {user.lastName}
+                        </td>
+
+                        <td className="px-4 py-4 text-sm text-slate-600 dark:text-slate-400">
+                          {user.email}
+                        </td>
+
+                        <td className="px-4 py-4 text-sm">
+                          <span
+                            className={[
+                              'inline-flex rounded-full border px-3 py-1 text-xs font-medium',
+                              getRoleBadgeClass(user.role),
+                            ].join(' ')}
+                          >
+                            {getRoleLabel(user.role)}
+                          </span>
+                        </td>
+
+                        <td className="px-4 py-4 text-sm">
+                          {user.role === 'student' ? (
+                            <span
+                              className={[
+                                'inline-flex rounded-full border px-3 py-1 text-xs font-medium',
+                                getJobTitleBadgeClass(user.jobTitle),
+                              ].join(' ')}
+                            >
+                              {getJobTitleLabel(user.jobTitle)}
+                            </span>
+                          ) : (
+                            <span className="text-xs text-slate-400 dark:text-slate-500">
+                              No aplica
+                            </span>
+                          )}
+                        </td>
+
+                        <td className="px-4 py-4 text-sm">
+                          <span
+                            className={[
+                              'inline-flex rounded-full border px-3 py-1 text-xs font-medium',
+                              getStatusBadgeClass(user.status),
+                            ].join(' ')}
+                          >
+                            {getStatusLabel(user.status)}
+                          </span>
+                        </td>
+
+                        <td className="px-4 py-4 text-sm text-slate-600 dark:text-slate-400">
+                          {user.teamId ?? 'Sin asignar'}
+                        </td>
+
+                        <td className="px-4 py-4 text-right">
+                          {canEditUser(user) ? (
+                            <button
+                              type="button"
+                              onClick={() => handleOpenEdit(user)}
+                              className={neutralActionButtonClass}
+                            >
+                              Editar
+                            </button>
+                          ) : (
+                            <span className="text-xs text-slate-400 dark:text-slate-500">
+                              Sin acción
+                            </span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </section>
+      </AppShell>
+
+      {selectedUser ? (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-950/35 px-4 backdrop-blur-sm">
+          <div className="w-full max-w-lg rounded-3xl border border-[color:var(--app-border)] bg-[var(--app-surface)] p-6 shadow-2xl">
+            <header className="mb-6">
+              <h2 className="text-xl font-semibold">Editar usuario</h2>
+              <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
+                Actualiza rol, estado y puesto del usuario seleccionado.
+              </p>
+            </header>
+
+            <div className="grid gap-4">
+              <div className="rounded-2xl border border-[color:var(--app-border)] bg-[var(--app-surface-muted)] p-4">
+                <p className="text-sm text-slate-500 dark:text-slate-400">Nombre</p>
+                <p className="mt-2 text-base font-medium">
+                  {selectedUser.firstName} {selectedUser.lastName}
+                </p>
+              </div>
+
+              <div className="rounded-2xl border border-[color:var(--app-border)] bg-[var(--app-surface-muted)] p-4">
+                <p className="text-sm text-slate-500 dark:text-slate-400">Correo</p>
+                <p className="mt-2 text-base font-medium">{selectedUser.email}</p>
+              </div>
+
+              <div>
+                <label
+                  htmlFor="role"
+                  className="mb-2 block text-sm font-medium text-slate-700 dark:text-slate-300"
+                >
+                  Rol
+                </label>
+                <select
+                  id="role"
+                  value={formRole}
+                  onChange={(event: ChangeEvent<HTMLSelectElement>) =>
+                    setFormRole(event.target.value as UserRole)
+                  }
+                  disabled={!canCurrentUserEditRoles || isSaving}
+                  className="w-full rounded-2xl border border-[color:var(--app-border)] bg-[var(--app-surface-muted)] px-4 py-3 text-sm text-[var(--app-fg)] outline-none transition disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {adminRoleOptions.map((roleOption) => (
+                    <option key={roleOption} value={roleOption}>
+                      {getRoleLabel(roleOption)}
+                    </option>
+                  ))}
+                </select>
+
+                {!canCurrentUserEditRoles ? (
+                  <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+                    Solo los administradores pueden modificar roles.
+                  </p>
+                ) : null}
+              </div>
+
+              {formRole === 'student' ? (
+                <div>
+                  <label
+                    htmlFor="jobTitle"
+                    className="mb-2 block text-sm font-medium text-slate-700 dark:text-slate-300"
+                  >
+                    Puesto de trabajo
+                  </label>
+                  <select
+                    id="jobTitle"
+                    value={formJobTitle}
+                    onChange={(event: ChangeEvent<HTMLSelectElement>) =>
+                      setFormJobTitle(event.target.value as StudentJobTitle)
+                    }
+                    disabled={isSaving}
+                    className="w-full rounded-2xl border border-[color:var(--app-border)] bg-[var(--app-surface-muted)] px-4 py-3 text-sm text-[var(--app-fg)] outline-none transition disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {studentJobOptions.map((jobOption) => (
+                      <option key={jobOption} value={jobOption}>
+                        {getJobTitleLabel(jobOption)}
+                      </option>
+                    ))}
+                  </select>
+
+                  <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+                    Este puesto define qué métricas, alertas y prioridades verá el
+                    estudiante en su dashboard.
+                  </p>
+                </div>
+              ) : null}
+
+              <div>
+                <label
+                  htmlFor="status"
+                  className="mb-2 block text-sm font-medium text-slate-700 dark:text-slate-300"
+                >
+                  Estado
+                </label>
+                <select
+                  id="status"
+                  value={formStatus}
+                  onChange={(event: ChangeEvent<HTMLSelectElement>) =>
+                    setFormStatus(event.target.value as UserStatus)
+                  }
+                  disabled={isSaving}
+                  className="w-full rounded-2xl border border-[color:var(--app-border)] bg-[var(--app-surface-muted)] px-4 py-3 text-sm text-[var(--app-fg)] outline-none transition disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  <option value="active">Activo</option>
+                  <option value="inactive">Inactivo</option>
+                  <option value="invited">Invitado</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="mt-8 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+              <button
+                type="button"
+                onClick={handleCloseEdit}
+                disabled={isSaving}
+                className={neutralActionButtonClass}
+              >
+                Cancelar
+              </button>
+
+              <button
+                type="button"
+                onClick={handleSave}
+                disabled={isSaving}
+                className={positiveActionButtonClass}
+              >
+                {isSaving ? 'Guardando...' : 'Guardar cambios'}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+    </>
+  );
+}

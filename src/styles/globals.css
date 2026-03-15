@@ -1,0 +1,160 @@
+@import "tailwindcss";
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* ==========================================================================
+   Theme foundation
+   --------------------------------------------------------------------------
+   Centralizes application-level design tokens for both light and dark themes.
+   This includes layout surfaces, foreground colors, semantic action colors
+   and the visual tokens used by the toast system.
+   ========================================================================== */
+
+:root {
+  color-scheme: light;
+
+  /* Application surfaces */
+  --app-bg: #f5f7fb;
+  --app-fg: #0f172a;
+  --app-surface: #fcfbf8;
+  --app-surface-muted: #f1f5f9;
+  --app-border: #dbe3ee;
+
+  /* Toast theme
+     Light application theme uses a dark toast shell for stronger contrast. */
+  --toast-fill: #171717;
+  --toast-title: #f8fafc;
+  --toast-description: rgba(248, 250, 252, 0.78);
+  --toast-badge-bg: rgba(255, 255, 255, 0.08);
+  --toast-button-bg: rgba(255, 255, 255, 0.08);
+  --toast-button-bg-hover: rgba(255, 255, 255, 0.14);
+  --toast-button-fg: #f8fafc;
+
+  /* Positive action tokens */
+  --action-positive-bg: #86efac;
+  --action-positive-bg-hover: #4ade80;
+  --action-positive-border: #4ade80;
+  --action-positive-fg: #14532d;
+
+  /* Negative action tokens */
+  --action-negative-bg: #fecaca;
+  --action-negative-bg-hover: #fca5a5;
+  --action-negative-border: #fca5a5;
+  --action-negative-fg: #7f1d1d;
+
+  /* Neutral action tokens */
+  --action-neutral-bg: #ffffff;
+  --action-neutral-bg-hover: #f8fafc;
+  --action-neutral-border: #cbd5e1;
+  --action-neutral-fg: #0f172a;
+
+  /* Sileo state colors */
+  --sileo-state-success: oklch(0.72 0.17 150);
+  --sileo-state-error: oklch(0.68 0.18 25);
+  --sileo-state-warning: oklch(0.82 0.16 85);
+  --sileo-state-info: oklch(0.71 0.14 240);
+
+  /* Sileo dimensions */
+  --sileo-width: 360px;
+  --sileo-height: 42px;
+  --sileo-duration: 520ms;
+}
+
+.dark {
+  color-scheme: dark;
+
+  /* Application surfaces
+     Neutral charcoal palette inspired by modern assistant-style dark UIs. */
+  --app-bg: #212121;
+  --app-fg: #ececec;
+  --app-surface: #2a2a2a;
+  --app-surface-muted: #262626;
+  --app-border: #3a3a3a;
+
+  /* Toast theme
+     Dark application theme uses a warm light toast shell for stronger contrast. */
+  --toast-fill: #f4efe6;
+  --toast-title: #171717;
+  --toast-description: rgba(23, 23, 23, 0.68);
+  --toast-badge-bg: rgba(0, 0, 0, 0.06);
+  --toast-button-bg: rgba(0, 0, 0, 0.06);
+  --toast-button-bg-hover: rgba(0, 0, 0, 0.1);
+  --toast-button-fg: #171717;
+
+  /* Positive action tokens */
+  --action-positive-bg: #22c55e;
+  --action-positive-bg-hover: #16a34a;
+  --action-positive-border: #16a34a;
+  --action-positive-fg: #f0fdf4;
+
+  /* Negative action tokens */
+  --action-negative-bg: #ef4444;
+  --action-negative-bg-hover: #dc2626;
+  --action-negative-border: #dc2626;
+  --action-negative-fg: #fef2f2;
+
+  /* Neutral action tokens */
+  --action-neutral-bg: #2f2f2f;
+  --action-neutral-bg-hover: #383838;
+  --action-neutral-border: #4a4a4a;
+  --action-neutral-fg: #f5f5f5;
+
+  /* Sileo state colors */
+  --sileo-state-success: oklch(0.68 0.16 150);
+  --sileo-state-error: oklch(0.62 0.19 25);
+  --sileo-state-warning: oklch(0.79 0.16 85);
+  --sileo-state-info: oklch(0.64 0.14 240);
+}
+
+/* ==========================================================================
+   Global reset
+   --------------------------------------------------------------------------
+   Establishes base sizing and box model consistency across the application.
+   ========================================================================== */
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+/* ==========================================================================
+   Base document styles
+   --------------------------------------------------------------------------
+   Applies the default font stack and routes theme-aware background and text
+   colors through CSS variables.
+   ========================================================================== */
+
+body {
+  margin: 0;
+  font-family: Inter, system-ui, sans-serif;
+  background-color: var(--app-bg);
+  color: var(--app-fg);
+}
+
+/* ==========================================================================
+   Text selection
+   --------------------------------------------------------------------------
+   Provides a subtle and consistent selection color aligned with the product
+   palette in both themes.
+   ========================================================================== */
+
+::selection {
+  background-color: rgba(59, 130, 246, 0.18);
+  color: inherit;
+}
+
+/* ==========================================================================
+   Sileo toast bridge
+   --------------------------------------------------------------------------
+   Exposes theme tokens to the Sileo toast system so notifications remain
+   visually aligned with the active application theme.
+   ========================================================================== */
+
+:root,
+.dark {
+  --sileo-fill: var(--toast-fill);
+}
