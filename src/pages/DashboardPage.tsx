@@ -1183,17 +1183,17 @@ export function DashboardPage({
           );
           const operationsSnapshot = await getDocs(operationsQuery);
 
-          const nextOperations: MonthlyOperationRecord[] = operationsSnapshot.docs
-            .map((document) => {
+          const nextOperations = operationsSnapshot.docs
+            .map<MonthlyOperationRecord>((document) => {
               const data = document.data();
 
               return {
                 id: document.id,
-                companyId: data.companyId ?? '',
-                teamId: data.teamId ?? '',
+                companyId: String(data.companyId ?? ''),
+                teamId: String(data.teamId ?? ''),
                 periodYear: Number(data.periodYear ?? 0),
                 periodMonth: Number(data.periodMonth ?? 0),
-                periodLabel: data.periodLabel ?? '',
+                periodLabel: String(data.periodLabel ?? ''),
                 openingCash: Number(data.openingCash ?? 0),
                 salesIncome: Number(data.salesIncome ?? 0),
                 serviceIncome: Number(data.serviceIncome ?? 0),
