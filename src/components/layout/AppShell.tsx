@@ -1,7 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { Sidebar } from './Sidebar';
 import { Topbar } from './Topbar';
-import { TeamChatDock } from '../chat/TeamChatDock';
 
 type AppShellProps = {
   title: string;
@@ -68,8 +67,6 @@ export function AppShell({
           </main>
         </div>
       </div>
-
-      <TeamChatDock />
     </div>
   );
 }
