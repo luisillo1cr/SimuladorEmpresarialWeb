@@ -3,6 +3,7 @@ import {
   useMemo,
   useState,
   type ChangeEvent,
+  type FormEvent,
 } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -11,13 +12,17 @@ import {
   getDocs,
   orderBy,
   query,
+  setDoc,
   updateDoc,
+  where,
 } from 'firebase/firestore';
+import { sendSignInLinkToEmail } from 'firebase/auth';
 import { AppShell } from '../components/layout/AppShell';
-import { db } from '../services/firebase/config';
+import { auth, db } from '../services/firebase/config';
 import { useAuth } from '../hooks/useAuth';
 import type { UserProfile, UserRole, UserStatus } from '../types/auth';
 import { getRoleLabel, getStatusLabel } from '../utils/authLabels';
+import { normalizeEmail } from '../utils/email';
 import { toast } from '../utils/toast';
 import {
   neutralActionButtonClass,
@@ -123,6 +128,10 @@ function getJobTitleBadgeClass(jobTitle: StudentJobTitle | null | undefined) {
   }
 }
 
+function getInviteLinkBaseUrl() {
+  return `${window.location.origin}${import.meta.env.BASE_URL}#/complete-signin`;
+}
+
 export function UsersPage({
   isDarkMode,
   onToggleTheme,
@@ -139,8 +148,18 @@ export function UsersPage({
   const [formJobTitle, setFormJobTitle] = useState<StudentJobTitle>('unassigned');
   const [isSaving, setIsSaving] = useState(false);
 
+  const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
+  const [inviteFirstName, setInviteFirstName] = useState('');
+  const [inviteLastName, setInviteLastName] = useState('');
+  const [inviteEmail, setInviteEmail] = useState('');
+  const [isInviting, setIsInviting] = useState(false);
+
   const canCurrentUserEditRoles = useMemo(() => {
     return profile?.role === 'admin';
+  }, [profile?.role]);
+
+  const canCurrentUserInvite = useMemo(() => {
+    return profile?.role === 'admin' || profile?.role === 'professor';
   }, [profile?.role]);
 
   const handleLogout = async () => {
@@ -295,6 +314,94 @@ export function UsersPage({
     }
   };
 
+  const resetInviteForm = () => {
+    setInviteFirstName('');
+    setInviteLastName('');
+    setInviteEmail('');
+  };
+
+  const handleCloseInviteModal = () => {
+    if (isInviting) {
+      return;
+    }
+
+    setIsInviteModalOpen(false);
+    resetInviteForm();
+  };
+
+  const handleInviteSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+
+    if (!profile) {
+      return;
+    }
+
+    const normalizedEmail = normalizeEmail(inviteEmail);
+
+    if (!inviteFirstName.trim() || !inviteLastName.trim() || !normalizedEmail) {
+      toast.warning(
+        'Campos incompletos',
+        'Debes ingresar nombre, apellido y correo electrónico.'
+      );
+      return;
+    }
+
+    try {
+      setIsInviting(true);
+
+      const existingUsersSnapshot = await getDocs(
+        query(collection(db, 'users'), where('email', '==', normalizedEmail))
+      );
+
+      if (!existingUsersSnapshot.empty) {
+        toast.warning(
+          'Correo ya registrado',
+          'Ya existe un usuario registrado con ese correo electrónico.'
+        );
+        return;
+      }
+
+      const inviteRef = doc(db, 'invites', normalizedEmail);
+
+      await setDoc(
+        inviteRef,
+        {
+          email: normalizedEmail,
+          firstName: inviteFirstName.trim(),
+          lastName: inviteLastName.trim(),
+          invitedBy: profile.uid,
+          role: 'student',
+          status: 'invited',
+          updatedAt: new Date(),
+          createdAt: new Date(),
+        },
+        { merge: true }
+      );
+
+      await sendSignInLinkToEmail(auth, normalizedEmail, {
+        url: getInviteLinkBaseUrl(),
+        handleCodeInApp: true,
+      });
+
+      toast.success(
+        'Invitación enviada',
+        'Se envió el enlace de activación al correo del estudiante.'
+      );
+
+      setIsInviteModalOpen(false);
+      resetInviteForm();
+      await loadUsers();
+    } catch (error) {
+      console.error('Error enviando invitación:', error);
+      toast.error(
+        'No se pudo enviar la invitación',
+        'Revisa dominios autorizados, configuración de Auth y vuelve a intentarlo.'
+      );
+    } finally {
+      setIsInviting(false);
+    }
+  };
+
   return (
     <>
       <AppShell
@@ -305,13 +412,25 @@ export function UsersPage({
         onLogout={handleLogout}
         onOpenProfile={handleOpenProfile}
       >
-        <section className="rounded-3xl border border-[color:var(--app-border)] bg-[var(--app-surface)] p-6 shadow-sm">
-          <header className="mb-6">
-            <h2 className="text-lg font-semibold">Listado de usuarios</h2>
-            <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
-              Visualiza usuarios registrados y asigna su puesto de trabajo cuando
-              sean estudiantes.
-            </p>
+        <section className="rounded-3xl border border-[color:var(--app-border)] bg-[var(--app-surface)] p-4 shadow-sm sm:p-6">
+          <header className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+            <div className="min-w-0">
+              <h2 className="text-lg font-semibold">Listado de usuarios</h2>
+              <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
+                Visualiza usuarios registrados y asigna su puesto de trabajo cuando
+                sean estudiantes.
+              </p>
+            </div>
+
+            {canCurrentUserInvite ? (
+              <button
+                type="button"
+                onClick={() => setIsInviteModalOpen(true)}
+                className={`${positiveActionButtonClass} w-full sm:w-auto`}
+              >
+                Invitar estudiante
+              </button>
+            ) : null}
           </header>
 
           {isLoadingUsers ? (
@@ -325,7 +444,7 @@ export function UsersPage({
           ) : (
             <div className="overflow-hidden rounded-2xl border border-[color:var(--app-border)]">
               <div className="overflow-x-auto">
-                <table className="min-w-full border-collapse">
+                <table className="min-w-[980px] border-collapse">
                   <thead className="bg-[var(--app-surface-muted)]">
                     <tr>
                       <th className="px-4 py-4 text-left text-sm font-semibold text-slate-700 dark:text-slate-300">
@@ -559,6 +678,99 @@ export function UsersPage({
               >
                 {isSaving ? 'Guardando...' : 'Guardar cambios'}
               </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {isInviteModalOpen ? (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-950/35 px-4 backdrop-blur-sm">
+          <div className="w-full max-w-xl rounded-3xl border border-[color:var(--app-border)] bg-[var(--app-surface)] shadow-2xl">
+            <div className="border-b border-[color:var(--app-border)] px-6 py-5">
+              <h2 className="text-xl font-semibold">Invitar estudiante</h2>
+              <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
+                Se creará una invitación y se enviará un enlace de activación al
+                correo del estudiante.
+              </p>
+            </div>
+
+            <form id="inviteStudentForm" onSubmit={handleInviteSubmit}>
+              <div className="grid gap-4 px-6 py-6">
+                <div>
+                  <label
+                    htmlFor="inviteFirstName"
+                    className="mb-2 block text-sm font-medium text-slate-700 dark:text-slate-300"
+                  >
+                    Nombre
+                  </label>
+                  <input
+                    id="inviteFirstName"
+                    type="text"
+                    value={inviteFirstName}
+                    onChange={(event) => setInviteFirstName(event.target.value)}
+                    className="w-full rounded-2xl border border-[color:var(--app-border)] bg-[var(--app-surface-muted)] px-4 py-3 text-sm text-[var(--app-fg)] outline-none transition"
+                  />
+                </div>
+
+                <div>
+                  <label
+                    htmlFor="inviteLastName"
+                    className="mb-2 block text-sm font-medium text-slate-700 dark:text-slate-300"
+                  >
+                    Apellido
+                  </label>
+                  <input
+                    id="inviteLastName"
+                    type="text"
+                    value={inviteLastName}
+                    onChange={(event) => setInviteLastName(event.target.value)}
+                    className="w-full rounded-2xl border border-[color:var(--app-border)] bg-[var(--app-surface-muted)] px-4 py-3 text-sm text-[var(--app-fg)] outline-none transition"
+                  />
+                </div>
+
+                <div>
+                  <label
+                    htmlFor="inviteEmail"
+                    className="mb-2 block text-sm font-medium text-slate-700 dark:text-slate-300"
+                  >
+                    Correo electrónico
+                  </label>
+                  <input
+                    id="inviteEmail"
+                    type="email"
+                    value={inviteEmail}
+                    onChange={(event) => setInviteEmail(event.target.value)}
+                    className="w-full rounded-2xl border border-[color:var(--app-border)] bg-[var(--app-surface-muted)] px-4 py-3 text-sm text-[var(--app-fg)] outline-none transition"
+                  />
+                </div>
+
+                <div className="rounded-2xl border border-[color:var(--app-border)] bg-[var(--app-surface-muted)] px-4 py-4 text-xs leading-5 text-slate-500 dark:text-slate-400">
+                  El estudiante recibirá un correo con enlace de activación para
+                  definir su contraseña y completar el ingreso inicial.
+                </div>
+              </div>
+            </form>
+
+            <div className="border-t border-[color:var(--app-border)] px-6 py-4">
+              <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+                <button
+                  type="button"
+                  onClick={handleCloseInviteModal}
+                  disabled={isInviting}
+                  className={neutralActionButtonClass}
+                >
+                  Cancelar
+                </button>
+
+                <button
+                  type="submit"
+                  form="inviteStudentForm"
+                  disabled={isInviting}
+                  className={positiveActionButtonClass}
+                >
+                  {isInviting ? 'Enviando...' : 'Enviar invitación'}
+                </button>
+              </div>
             </div>
           </div>
         </div>

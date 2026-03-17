@@ -483,7 +483,7 @@ export function CompaniesPage({
         onLogout={handleLogout}
         onOpenProfile={handleOpenProfile}
       >
-        <section className="rounded-3xl border border-[color:var(--app-border)] bg-[var(--app-surface)] p-6 shadow-sm">
+        <section className="rounded-3xl border border-[color:var(--app-border)] bg-[var(--app-surface)] p-4 shadow-sm sm:p-6">
           <header className="mb-6">
             <h2 className="text-lg font-semibold">Listado de empresas</h2>
             <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
@@ -554,7 +554,7 @@ export function CompaniesPage({
                         </div>
                       </div>
 
-                      <div className="mt-5 grid grid-cols-2 gap-3">
+                      <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2">
                         <div className="rounded-2xl border border-[color:var(--app-border)] bg-[var(--app-surface)] px-4 py-3">
                           <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">
                             Cédula
@@ -631,9 +631,9 @@ export function CompaniesPage({
       </AppShell>
 
       {isCreateModalOpen ? (
-        <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-950/45 px-4 py-6 backdrop-blur-sm sm:px-6">
-          <div className="w-full max-w-4xl">
-            <div className="max-h-[88vh] overflow-hidden rounded-3xl border border-[color:var(--app-border)] bg-[var(--app-surface)] shadow-2xl">
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-950/45 px-4 py-4 backdrop-blur-sm sm:px-6">
+          <div className="w-full max-w-5xl">
+            <div className="max-h-[92vh] overflow-hidden rounded-3xl border border-[color:var(--app-border)] bg-[var(--app-surface)] shadow-2xl">
               <div className="border-b border-[color:var(--app-border)] px-6 py-5 sm:px-8">
                 <h2 className="text-2xl font-semibold tracking-tight text-[var(--app-fg)]">
                   Crear empresa
@@ -645,7 +645,8 @@ export function CompaniesPage({
               </div>
 
               <form
-                className="grid max-h-[calc(88vh-88px)] grid-cols-1 gap-0 lg:grid-cols-[minmax(0,1.25fr)_360px]"
+                id="createCompanyForm"
+                className="grid max-h-[calc(92vh-160px)] min-h-0 grid-cols-1 gap-0 lg:grid-cols-[minmax(0,1.25fr)_360px]"
                 onSubmit={handleCreateCompany}
               >
                 <div className="min-h-0 overflow-y-auto px-6 py-6 sm:px-8">
@@ -775,7 +776,7 @@ export function CompaniesPage({
                   </div>
                 </div>
 
-                <aside className="flex min-h-0 flex-col border-t border-[color:var(--app-border)] bg-[var(--app-surface-muted)] px-6 py-6 lg:border-l lg:border-t-0">
+                <aside className="min-h-0 overflow-y-auto border-t border-[color:var(--app-border)] bg-[var(--app-surface-muted)] px-6 py-6 lg:border-l lg:border-t-0">
                   <div>
                     <p className="text-sm font-medium text-[var(--app-fg)]">
                       Resumen de empresa
@@ -785,7 +786,7 @@ export function CompaniesPage({
                     </p>
                   </div>
 
-                  <div className="mt-5 min-h-0 flex-1 overflow-y-auto space-y-3">
+                  <div className="mt-5 space-y-3">
                     <div className="rounded-2xl border border-[color:var(--app-border)] bg-[var(--app-surface)] px-4 py-4">
                       <p className="text-xs text-slate-500 dark:text-slate-400">
                         Equipo
@@ -822,36 +823,39 @@ export function CompaniesPage({
                       </p>
                     </div>
                   </div>
-
-                  <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:justify-end lg:flex-col">
-                    <button
-                      type="submit"
-                      disabled={isSaving}
-                      className={positiveActionButtonClass}
-                    >
-                      {isSaving ? 'Guardando...' : 'Crear empresa'}
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={handleCloseCreateModal}
-                      disabled={isSaving}
-                      className={neutralActionButtonClass}
-                    >
-                      Cancelar
-                    </button>
-                  </div>
                 </aside>
               </form>
+
+              <div className="border-t border-[color:var(--app-border)] px-6 py-4">
+                <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+                  <button
+                    type="button"
+                    onClick={handleCloseCreateModal}
+                    disabled={isSaving}
+                    className={neutralActionButtonClass}
+                  >
+                    Cancelar
+                  </button>
+
+                  <button
+                    type="submit"
+                    form="createCompanyForm"
+                    disabled={isSaving}
+                    className={positiveActionButtonClass}
+                  >
+                    {isSaving ? 'Guardando...' : 'Crear empresa'}
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         </div>
       ) : null}
 
       {selectedCompany ? (
-        <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-950/45 px-4 py-6 backdrop-blur-sm sm:px-6">
-          <div className="w-full max-w-4xl">
-            <div className="max-h-[88vh] overflow-hidden rounded-3xl border border-[color:var(--app-border)] bg-[var(--app-surface)] shadow-2xl">
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-950/45 px-4 py-4 backdrop-blur-sm sm:px-6">
+          <div className="w-full max-w-5xl">
+            <div className="max-h-[92vh] overflow-hidden rounded-3xl border border-[color:var(--app-border)] bg-[var(--app-surface)] shadow-2xl">
               <div className="border-b border-[color:var(--app-border)] px-6 py-5 sm:px-8">
                 <h2 className="text-2xl font-semibold tracking-tight text-[var(--app-fg)]">
                   Editar empresa
@@ -862,7 +866,8 @@ export function CompaniesPage({
               </div>
 
               <form
-                className="grid max-h-[calc(88vh-88px)] grid-cols-1 gap-0 lg:grid-cols-[minmax(0,1.25fr)_360px]"
+                id="editCompanyForm"
+                className="grid max-h-[calc(92vh-160px)] min-h-0 grid-cols-1 gap-0 lg:grid-cols-[minmax(0,1.25fr)_360px]"
                 onSubmit={handleUpdateCompany}
               >
                 <div className="min-h-0 overflow-y-auto px-6 py-6 sm:px-8">
@@ -982,17 +987,17 @@ export function CompaniesPage({
                   </div>
                 </div>
 
-                <aside className="flex min-h-0 flex-col border-t border-[color:var(--app-border)] bg-[var(--app-surface-muted)] px-6 py-6 lg:border-l lg:border-t-0">
+                <aside className="min-h-0 overflow-y-auto border-t border-[color:var(--app-border)] bg-[var(--app-surface-muted)] px-6 py-6 lg:border-l lg:border-t-0">
                   <div>
                     <p className="text-sm font-medium text-[var(--app-fg)]">
                       Resumen de empresa
                     </p>
                     <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                      Vista previa del registro actualizado.
+                      Vista previa del registro actual.
                     </p>
                   </div>
 
-                  <div className="mt-5 min-h-0 flex-1 overflow-y-auto space-y-3">
+                  <div className="mt-5 space-y-3">
                     <div className="rounded-2xl border border-[color:var(--app-border)] bg-[var(--app-surface)] px-4 py-4">
                       <p className="text-xs text-slate-500 dark:text-slate-400">
                         Equipo
@@ -1029,27 +1034,30 @@ export function CompaniesPage({
                       </p>
                     </div>
                   </div>
-
-                  <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:justify-end lg:flex-col">
-                    <button
-                      type="submit"
-                      disabled={isUpdating}
-                      className={positiveActionButtonClass}
-                    >
-                      {isUpdating ? 'Guardando...' : 'Guardar cambios'}
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={handleCloseEditModal}
-                      disabled={isUpdating}
-                      className={neutralActionButtonClass}
-                    >
-                      Cancelar
-                    </button>
-                  </div>
                 </aside>
               </form>
+
+              <div className="border-t border-[color:var(--app-border)] px-6 py-4">
+                <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+                  <button
+                    type="button"
+                    onClick={handleCloseEditModal}
+                    disabled={isUpdating}
+                    className={neutralActionButtonClass}
+                  >
+                    Cancelar
+                  </button>
+
+                  <button
+                    type="submit"
+                    form="editCompanyForm"
+                    disabled={isUpdating}
+                    className={positiveActionButtonClass}
+                  >
+                    {isUpdating ? 'Guardando...' : 'Guardar cambios'}
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -1066,35 +1074,18 @@ export function CompaniesPage({
                 Esta acción eliminará la empresa{' '}
                 <span className="font-medium text-[var(--app-fg)]">
                   {companyToDelete.tradeName}
-                </span>{' '}
-                y dejará disponible nuevamente al equipo asignado.
+                </span>
+                .
               </p>
             </header>
 
             <div className="mt-5 rounded-2xl border border-[color:var(--app-border)] bg-[var(--app-surface-muted)] p-4">
               <p className="text-sm font-medium text-[var(--app-fg)]">
-                Resumen del registro
+                Equipo vinculado
               </p>
-
-              <div className="mt-3 grid gap-3">
-                <div className="rounded-2xl border border-[color:var(--app-border)] bg-[var(--app-surface)] px-4 py-3">
-                  <p className="text-xs text-slate-500 dark:text-slate-400">
-                    Empresa
-                  </p>
-                  <p className="mt-1 text-sm font-medium text-[var(--app-fg)]">
-                    {companyToDelete.tradeName}
-                  </p>
-                </div>
-
-                <div className="rounded-2xl border border-[color:var(--app-border)] bg-[var(--app-surface)] px-4 py-3">
-                  <p className="text-xs text-slate-500 dark:text-slate-400">
-                    Equipo asignado
-                  </p>
-                  <p className="mt-1 text-sm font-medium text-[var(--app-fg)]">
-                    {companyToDelete.teamName}
-                  </p>
-                </div>
-              </div>
+              <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">
+                {companyToDelete.teamName}
+              </p>
             </div>
 
             <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
