@@ -19,7 +19,8 @@ export function Sidebar({
 
   useEffect(() => {
     onClose?.();
-  }, [location.pathname, onClose]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.pathname]);
 
   const navigationItems = [
     { label: 'Dashboard', to: '/dashboard', visible: true },
