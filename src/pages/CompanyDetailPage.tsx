@@ -1,5 +1,5 @@
 
-import { useEffect, useMemo, useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { collection, doc, getDoc, getDocs, query, serverTimestamp, updateDoc, where } from 'firebase/firestore';
 import { AppShell } from '../components/layout/AppShell';
@@ -83,6 +83,20 @@ function getRequestStatusLabel(status: ComplianceDecisionStatus) {
   }
 }
 
+
+function getTimestampSeconds(value: unknown) {
+  if (
+    value &&
+    typeof value === 'object' &&
+    'seconds' in value &&
+    typeof (value as { seconds?: unknown }).seconds === 'number'
+  ) {
+    return (value as { seconds: number }).seconds;
+  }
+
+  return 0;
+}
+
 function isValidStudentJobTitle(value: unknown): value is StudentJobTitle {
   return value === 'unassigned' || value === 'general_manager' || value === 'finance' || value === 'sales' || value === 'operations' || value === 'hr';
 }
@@ -114,7 +128,7 @@ function getStudentJobTitleBadgeClass(jobTitle: StudentJobTitle) {
 export function CompanyDetailPage({ isDarkMode, onToggleTheme }: CompanyDetailPageProps) {
   const navigate = useNavigate();
   const { companyId } = useParams();
-  const { profile, signOutUser } = useAuth();
+  const { signOutUser } = useAuth();
 
   const [company, setCompany] = useState<CompanyDetail | null>(null);
   const [teamStudents, setTeamStudents] = useState<StudentOption[]>([]);
@@ -192,7 +206,7 @@ export function CompanyDetailPage({ isDarkMode, onToggleTheme }: CompanyDetailPa
       );
 
       const nextStudents = usersSnapshot.docs
-        .map((document) => {
+        .map((document): StudentOption & { role: string; status: string } => {
           const data = document.data();
           return {
             uid: document.id,
@@ -225,18 +239,28 @@ export function CompanyDetailPage({ isDarkMode, onToggleTheme }: CompanyDetailPa
         query(collection(db, 'companyComplianceRequests'), where('companyId', '==', currentCompanyId))
       );
       const nextRequests: ComplianceRequestRecord[] = requestsSnapshot.docs
-        .map((document) => {
+        .map((document): ComplianceRequestRecord => {
           const data = document.data();
+          const type: ComplianceRequestType =
+            data.type === 'municipal_patent' ? 'municipal_patent' : 'tax_registration';
+          const status: ComplianceDecisionStatus =
+            data.status === 'approved'
+              ? 'approved'
+              : data.status === 'rejected'
+                ? 'rejected'
+                : data.status === 'not_required'
+                  ? 'not_required'
+                  : 'pending';
           return {
             id: document.id,
             companyId: String(data.companyId ?? ''),
-            type: data.type === 'municipal_patent' ? 'municipal_patent' : 'tax_registration',
-            status: data.status === 'approved' ? 'approved' : data.status === 'rejected' ? 'rejected' : data.status === 'not_required' ? 'not_required' : 'pending',
+            type,
+            status,
             reviewerComment: String(data.reviewerComment ?? ''),
             submittedAt: data.submittedAt ?? null,
           };
         })
-        .sort((a, b) => (b.submittedAt?.seconds ?? 0) - (a.submittedAt?.seconds ?? 0));
+        .sort((a, b) => getTimestampSeconds(b.submittedAt) - getTimestampSeconds(a.submittedAt));
       setRequests(nextRequests);
     } catch (error) {
       console.error('Error cargando solicitudes regulatorias:', error);

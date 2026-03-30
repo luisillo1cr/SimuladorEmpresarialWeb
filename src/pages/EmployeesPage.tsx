@@ -265,7 +265,7 @@ export function EmployeesPage({ isDarkMode, onToggleTheme }: EmployeesPageProps)
 
   const [selectedEmployee, setSelectedEmployee] = useState<EmployeeRecord | null>(null);
   const [editSelectedCompanyId, setEditSelectedCompanyId] = useState('');
-  const [editSelectedStudentId, setEditSelectedStudentId] = useState('');
+  const [, setEditSelectedStudentId] = useState('');
   const [editFullName, setEditFullName] = useState('');
   const [editPosition, setEditPosition] = useState('');
   const [editDepartment, setEditDepartment] = useState('');

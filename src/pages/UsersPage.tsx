@@ -48,15 +48,6 @@ type UserProfileWithJob = UserProfile & {
 
 const adminRoleOptions: UserRole[] = ['student', 'professor', 'admin'];
 
-const studentJobOptions: StudentJobTitle[] = [
-  'unassigned',
-  'general_manager',
-  'finance',
-  'sales',
-  'operations',
-  'hr',
-];
-
 function isValidStudentJobTitle(value: unknown): value is StudentJobTitle {
   return (
     value === 'unassigned' ||
