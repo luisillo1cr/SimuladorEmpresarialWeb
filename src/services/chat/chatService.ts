@@ -233,6 +233,15 @@ export async function softDeleteMessage({
   });
 }
 
+function isPermissionDeniedError(error: unknown) {
+  return (
+    typeof error === 'object' &&
+    error != null &&
+    'code' in error &&
+    (error as { code?: string }).code === 'permission-denied'
+  );
+}
+
 export async function markChatAsRead({
   uid,
   chatId,
@@ -240,16 +249,22 @@ export async function markChatAsRead({
   const stateId = getUserChatStateId(uid, chatId);
   const stateRef = doc(db, 'userChatStates', stateId);
 
-  await setDoc(
-    stateRef,
-    {
-      uid,
-      chatId,
-      lastReadAt: serverTimestamp(),
-      isPinned: false,
-    },
-    { merge: true }
-  );
+  try {
+    await setDoc(
+      stateRef,
+      {
+        uid,
+        chatId,
+        lastReadAt: serverTimestamp(),
+        isPinned: false,
+      },
+      { merge: true }
+    );
+  } catch (error) {
+    if (!isPermissionDeniedError(error)) {
+      throw error;
+    }
+  }
 }
 
 export function subscribeToChatMessages(

@@ -79,6 +79,16 @@ function getSenderRoleLabel(role: string) {
   }
 }
 
+
+function isPermissionDeniedError(error: unknown) {
+  return (
+    typeof error === 'object' &&
+    error != null &&
+    'code' in error &&
+    (error as { code?: string }).code === 'permission-denied'
+  );
+}
+
 function playNotificationSound() {
   try {
     const AudioContextClass =
@@ -147,10 +157,12 @@ export function TeamChatDock() {
       },
       (error) => {
         console.error('Error cargando chats:', error);
-        toast.error(
-          'No se pudieron cargar los chats',
-          'Revisa las reglas o la configuración del módulo de chat.'
-        );
+        if (!isPermissionDeniedError(error)) {
+          toast.error(
+            'No se pudieron cargar los chats',
+            'Revisa las reglas o la configuración del módulo de chat.'
+          );
+        }
       }
     );
 
@@ -213,10 +225,12 @@ export function TeamChatDock() {
       },
       (error) => {
         console.error('Error cargando sala de chat:', error);
-        toast.error(
-          'No se pudo abrir el chat',
-          'No fue posible cargar los datos del chat seleccionado.'
-        );
+        if (!isPermissionDeniedError(error)) {
+          toast.error(
+            'No se pudo abrir el chat',
+            'No fue posible cargar los datos del chat seleccionado.'
+          );
+        }
       }
     );
 
@@ -227,10 +241,12 @@ export function TeamChatDock() {
       },
       (error) => {
         console.error('Error cargando mensajes:', error);
-        toast.error(
-          'No se pudieron cargar los mensajes',
-          'No fue posible leer los mensajes del chat.'
-        );
+        if (!isPermissionDeniedError(error)) {
+          toast.error(
+            'No se pudieron cargar los mensajes',
+            'No fue posible leer los mensajes del chat.'
+          );
+        }
       }
     );
 

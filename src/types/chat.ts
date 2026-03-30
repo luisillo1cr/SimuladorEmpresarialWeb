@@ -19,6 +19,10 @@ export type ChatRoom = {
   lastMessageAt?: unknown;
   lastMessageSenderId: string | null;
   isDeleted: boolean;
+  studentId?: string | null;
+  studentName?: string | null;
+  professorId?: string | null;
+  professorName?: string | null;
 };
 
 export type ChatMessage = {
@@ -42,6 +46,18 @@ export type UserChatState = {
   chatId: string;
   lastReadAt?: unknown;
   isPinned?: boolean;
+};
+
+export type ChatDirectoryUserRole = 'admin' | 'professor' | 'student';
+
+export type ChatDirectoryUser = {
+  id: string;
+  firstName: string;
+  lastName: string;
+  fullName: string;
+  role: ChatDirectoryUserRole;
+  teamId: string | null;
+  status: 'active' | 'inactive' | 'invited';
 };
 
 export type ChatListItem = {

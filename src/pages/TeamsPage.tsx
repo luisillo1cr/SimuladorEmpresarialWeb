@@ -38,6 +38,9 @@ type TeamRecord = {
   createdAt?: unknown;
 };
 
+const STANDARD_TEAM_MEMBERS = 3;
+const EXCEPTION_TEAM_MEMBERS = 4;
+
 function buildMemberLabel(user: UserProfile) {
   return `${user.firstName} ${user.lastName}`.trim();
 }
@@ -60,6 +63,8 @@ export function TeamsPage({
   const [teams, setTeams] = useState<TeamRecord[]>([]);
   const [students, setStudents] = useState<UserProfile[]>([]);
   const [isLoadingTeams, setIsLoadingTeams] = useState(true);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [teamFilter, setTeamFilter] = useState<'all' | 'standard' | 'exception' | 'incomplete'>('all');
 
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [teamName, setTeamName] = useState('');
@@ -75,6 +80,9 @@ export function TeamsPage({
 
   const [teamToDelete, setTeamToDelete] = useState<TeamRecord | null>(null);
   const [isDeletingTeam, setIsDeletingTeam] = useState(false);
+  const [teamToExtend, setTeamToExtend] = useState<TeamRecord | null>(null);
+  const [extensionStudentId, setExtensionStudentId] = useState('');
+  const [isExtendingTeam, setIsExtendingTeam] = useState(false);
 
   const existingStudentIds = useMemo(() => {
     return new Set(students.map((student) => student.uid));
@@ -109,6 +117,65 @@ export function TeamsPage({
       editSelectedStudentIds.includes(student.uid)
     );
   }, [editableStudents, editSelectedStudentIds]);
+
+  const extensionCandidates = useMemo(() => {
+    if (!teamToExtend) {
+      return [];
+    }
+
+    return students.filter((student) => student.teamId == null && student.status === 'active');
+  }, [students, teamToExtend]);
+
+  const normalizedSearchTerm = useMemo(() => searchTerm.trim().toLowerCase(), [searchTerm]);
+
+  const filteredTeams = useMemo(() => {
+    return teams.filter((team) => {
+      const matchesSearch =
+        normalizedSearchTerm.length === 0 ||
+        team.name.toLowerCase().includes(normalizedSearchTerm) ||
+        team.memberNames.some((memberName) =>
+          memberName.toLowerCase().includes(normalizedSearchTerm)
+        );
+
+      if (!matchesSearch) {
+        return false;
+      }
+
+      if (teamFilter === 'standard') {
+        return team.memberIds.length >= 1 && team.memberIds.length <= STANDARD_TEAM_MEMBERS;
+      }
+
+      if (teamFilter === 'exception') {
+        return team.memberIds.length === EXCEPTION_TEAM_MEMBERS;
+      }
+
+      if (teamFilter === 'incomplete') {
+        return team.memberIds.length < STANDARD_TEAM_MEMBERS;
+      }
+
+      return true;
+    });
+  }, [normalizedSearchTerm, teamFilter, teams]);
+
+  const teamsSummary = useMemo(() => {
+    const standardTeams = teams.filter(
+      (team) => team.memberIds.length >= 1 && team.memberIds.length <= STANDARD_TEAM_MEMBERS
+    ).length;
+    const exceptionTeams = teams.filter(
+      (team) => team.memberIds.length === EXCEPTION_TEAM_MEMBERS
+    ).length;
+    const incompleteTeams = teams.filter(
+      (team) => team.memberIds.length < STANDARD_TEAM_MEMBERS
+    ).length;
+
+    return {
+      total: teams.length,
+      standard: standardTeams,
+      exception: exceptionTeams,
+      incomplete: incompleteTeams,
+      availableStudents: availableStudents.length,
+    };
+  }, [availableStudents.length, teams]);
 
   const handleLogout = async () => {
     await signOutUser();
@@ -195,10 +262,10 @@ export function TeamsPage({
         return currentIds.filter((id) => id !== studentId);
       }
 
-      if (currentIds.length >= 3) {
+      if (currentIds.length >= EXCEPTION_TEAM_MEMBERS) {
         toast.warning(
           'Límite alcanzado',
-          'Un equipo puede tener un máximo de 3 estudiantes.'
+          'Un equipo puede tener un máximo excepcional de 4 estudiantes.'
         );
         return currentIds;
       }
@@ -213,10 +280,10 @@ export function TeamsPage({
         return currentIds.filter((id) => id !== studentId);
       }
 
-      if (currentIds.length >= 3) {
+      if (currentIds.length >= EXCEPTION_TEAM_MEMBERS) {
         toast.warning(
           'Límite alcanzado',
-          'Un equipo puede tener un máximo de 3 estudiantes.'
+          'Un equipo puede tener un máximo excepcional de 4 estudiantes.'
         );
         return currentIds;
       }
@@ -294,10 +361,10 @@ export function TeamsPage({
       return;
     }
 
-    if (selectedStudentIds.length > 3) {
+    if (selectedStudentIds.length > STANDARD_TEAM_MEMBERS) {
       toast.warning(
         'Límite excedido',
-        'Un equipo solo puede tener entre 1 y 3 integrantes.'
+        'Un equipo nuevo solo puede iniciar con entre 1 y 3 integrantes.'
       );
       return;
     }
@@ -433,10 +500,10 @@ export function TeamsPage({
       return;
     }
 
-    if (validNextMemberIds.length > 3) {
+    if (validNextMemberIds.length > EXCEPTION_TEAM_MEMBERS) {
       toast.warning(
         'Límite excedido',
-        'Un equipo solo puede tener entre 1 y 3 integrantes.'
+        'Un equipo solo puede llegar a 4 integrantes como excepción.'
       );
       return;
     }
@@ -638,23 +705,169 @@ export function TeamsPage({
     }
   };
 
+
+  const handleCloseExtendModal = () => {
+    if (isExtendingTeam) {
+      return;
+    }
+
+    setTeamToExtend(null);
+    setExtensionStudentId('');
+  };
+
+  const handleExtendTeam = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+
+    if (!teamToExtend || !extensionStudentId) {
+      toast.warning(
+        'Integrante requerido',
+        'Debes seleccionar el estudiante que se agregará al equipo.'
+      );
+      return;
+    }
+
+    if (teamToExtend.memberIds.length >= EXCEPTION_TEAM_MEMBERS) {
+      toast.warning(
+        'Límite alcanzado',
+        'Este equipo ya alcanzó el máximo excepcional de 4 integrantes.'
+      );
+      return;
+    }
+
+    const studentToAdd = students.find((student) => student.uid === extensionStudentId);
+
+    if (!studentToAdd || studentToAdd.teamId != null) {
+      toast.warning(
+        'Integrante inválido',
+        'El estudiante seleccionado ya no está disponible.'
+      );
+      return;
+    }
+
+    try {
+      setIsExtendingTeam(true);
+
+      const nextMemberIds = [...teamToExtend.memberIds, studentToAdd.uid];
+      const nextMemberNames = [...teamToExtend.memberNames, buildMemberLabel(studentToAdd)];
+      const batch = writeBatch(db);
+      const teamRef = doc(db, 'teams', teamToExtend.id);
+      const internalChatRef = doc(db, 'chats', getTeamInternalChatId(teamToExtend.id));
+      const professorChatRef = doc(db, 'chats', getTeamProfessorChatId(teamToExtend.id));
+      const studentRef = doc(db, 'users', studentToAdd.uid);
+
+      batch.update(teamRef, {
+        memberIds: nextMemberIds,
+        memberNames: nextMemberNames,
+        updatedAt: serverTimestamp(),
+      });
+
+      batch.update(studentRef, {
+        teamId: teamToExtend.id,
+        updatedAt: serverTimestamp(),
+      });
+
+      batch.set(
+        internalChatRef,
+        {
+          participantIds: nextMemberIds,
+          updatedAt: serverTimestamp(),
+        },
+        { merge: true }
+      );
+
+      batch.set(
+        professorChatRef,
+        {
+          participantIds: nextMemberIds,
+          updatedAt: serverTimestamp(),
+        },
+        { merge: true }
+      );
+
+      await batch.commit();
+
+      toast.success(
+        'Integrante agregado',
+        'Se aplicó la excepción y el equipo ahora tiene un integrante adicional.'
+      );
+
+      setTeamToExtend(null);
+      setExtensionStudentId('');
+      await Promise.all([loadTeams(), loadStudents()]);
+    } catch (error) {
+      console.error('Error agregando integrante excepcional:', error);
+      toast.error(
+        'No se pudo ampliar el equipo',
+        'Verifica las reglas y vuelve a intentarlo.'
+      );
+    } finally {
+      setIsExtendingTeam(false);
+    }
+  };
+
   return (
     <>
       <AppShell
         title="Equipos"
-        subtitle="Crea y administra equipos de trabajo de 1 a 3 estudiantes."
+        subtitle="Crea, filtra y administra equipos de trabajo, con control visual de integrantes y disponibilidad."
         isDarkMode={isDarkMode}
         onToggleTheme={onToggleTheme}
         onLogout={handleLogout}
         onOpenProfile={handleOpenProfile}
       >
-        <section className="rounded-3xl border border-[color:var(--app-border)] bg-[var(--app-surface)] p-6 shadow-sm">
-          <header className="mb-6">
-            <h2 className="text-lg font-semibold">Listado de equipos</h2>
-            <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
-              Gestiona grupos de trabajo y asigna estudiantes disponibles.
-            </p>
-          </header>
+        <div className="space-y-6">
+          <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+            <article className="rounded-3xl border border-[color:var(--app-border)] bg-[var(--app-surface)] p-5 shadow-sm">
+              <p className="text-sm text-slate-500 dark:text-slate-400">Equipos totales</p>
+              <p className="mt-2 text-2xl font-semibold text-[var(--app-fg)]">{teamsSummary.total}</p>
+            </article>
+            <article className="rounded-3xl border border-[color:var(--app-border)] bg-[var(--app-surface)] p-5 shadow-sm">
+              <p className="text-sm text-slate-500 dark:text-slate-400">Equipos estándar</p>
+              <p className="mt-2 text-2xl font-semibold text-emerald-700 dark:text-emerald-300">{teamsSummary.standard}</p>
+            </article>
+            <article className="rounded-3xl border border-[color:var(--app-border)] bg-[var(--app-surface)] p-5 shadow-sm">
+              <p className="text-sm text-slate-500 dark:text-slate-400">Equipos con excepción</p>
+              <p className="mt-2 text-2xl font-semibold text-amber-700 dark:text-amber-300">{teamsSummary.exception}</p>
+            </article>
+            <article className="rounded-3xl border border-[color:var(--app-border)] bg-[var(--app-surface)] p-5 shadow-sm">
+              <p className="text-sm text-slate-500 dark:text-slate-400">Equipos incompletos</p>
+              <p className="mt-2 text-2xl font-semibold text-sky-700 dark:text-sky-300">{teamsSummary.incomplete}</p>
+            </article>
+            <article className="rounded-3xl border border-[color:var(--app-border)] bg-[var(--app-surface)] p-5 shadow-sm">
+              <p className="text-sm text-slate-500 dark:text-slate-400">Estudiantes disponibles</p>
+              <p className="mt-2 text-2xl font-semibold text-[var(--app-fg)]">{teamsSummary.availableStudents}</p>
+            </article>
+          </section>
+
+          <section className="rounded-3xl border border-[color:var(--app-border)] bg-[var(--app-surface)] p-6 shadow-sm">
+            <header className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+              <div>
+                <h2 className="text-lg font-semibold">Listado de equipos</h2>
+                <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
+                  Gestiona grupos de trabajo, encuentra integrantes rápido y detecta equipos incompletos.
+                </p>
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-2 lg:min-w-[420px]">
+                <input
+                  type="text"
+                  value={searchTerm}
+                  onChange={(event) => setSearchTerm(event.target.value)}
+                  placeholder="Buscar por equipo o integrante"
+                  className="w-full rounded-2xl border border-[color:var(--app-border)] bg-[var(--app-surface-muted)] px-4 py-3 text-sm text-[var(--app-fg)] outline-none transition"
+                />
+                <select
+                  value={teamFilter}
+                  onChange={(event) => setTeamFilter(event.target.value as 'all' | 'standard' | 'exception' | 'incomplete')}
+                  className="w-full rounded-2xl border border-[color:var(--app-border)] bg-[var(--app-surface-muted)] px-4 py-3 text-sm text-[var(--app-fg)] outline-none transition"
+                >
+                  <option value="all">Todos los equipos</option>
+                  <option value="standard">Equipos estándar</option>
+                  <option value="exception">Con excepción de 4</option>
+                  <option value="incomplete">Equipos incompletos</option>
+                </select>
+              </div>
+            </header>
 
           {isLoadingTeams ? (
             <div className="rounded-2xl border border-[color:var(--app-border)] bg-[var(--app-surface-muted)] p-6 text-sm text-slate-600 dark:text-slate-400">
@@ -684,12 +897,12 @@ export function TeamsPage({
                 </span>
               </button>
 
-              {teams.length === 0 ? (
+              {filteredTeams.length === 0 ? (
                 <div className="flex h-full min-h-[280px] items-center justify-center rounded-3xl border border-[color:var(--app-border)] bg-[var(--app-surface-muted)] p-6 text-center text-sm text-slate-600 dark:text-slate-400">
-                  Todavía no hay equipos creados. Usa la tarjeta de la izquierda para crear el primero.
+                  No hay equipos que coincidan con la búsqueda o el filtro actual. Ajusta los criterios o crea uno nuevo.
                 </div>
               ) : (
-                teams.map((team) => (
+                filteredTeams.map((team) => (
                   <article
                     key={team.id}
                     className="h-full overflow-hidden rounded-3xl border border-[color:var(--app-border)] bg-[var(--app-surface-muted)]"
@@ -731,9 +944,25 @@ export function TeamsPage({
                           <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">
                             Capacidad
                           </p>
-                          <p className="mt-2 text-lg font-semibold text-[var(--app-fg)]">
-                            {team.memberIds.length}/3
-                          </p>
+                          <div className="mt-2 flex items-center justify-between gap-3">
+                            <p className="text-lg font-semibold text-[var(--app-fg)]">
+                              {team.memberIds.length}/{EXCEPTION_TEAM_MEMBERS}
+                            </p>
+                            {team.memberIds.length < EXCEPTION_TEAM_MEMBERS ? (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setTeamToExtend(team);
+                                  setExtensionStudentId('');
+                                }}
+                                className="inline-flex h-8 w-8 items-center justify-center rounded-xl border border-[color:var(--app-border)] bg-[var(--app-surface-muted)] text-sm font-semibold text-[var(--app-fg)] transition hover:bg-[var(--app-bg)]"
+                                title="Agregar integrante excepcional"
+                                aria-label="Agregar integrante excepcional"
+                              >
+                                +
+                              </button>
+                            ) : null}
+                          </div>
                         </div>
                       </div>
 
@@ -744,7 +973,7 @@ export function TeamsPage({
                           </p>
 
                           <span className="text-xs text-slate-500 dark:text-slate-400">
-                            Máximo 3 por equipo
+                            Base 3 · excepción 4
                           </span>
                         </div>
 
@@ -794,7 +1023,8 @@ export function TeamsPage({
               )}
             </div>
           )}
-        </section>
+          </section>
+        </div>
       </AppShell>
 
       {isCreateModalOpen ? (
@@ -1084,6 +1314,55 @@ export function TeamsPage({
                 </aside>
               </form>
             </div>
+          </div>
+        </div>
+      ) : null}
+
+
+      {teamToExtend ? (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-950/45 px-4 py-6 backdrop-blur-sm sm:px-6">
+          <div className="w-full max-w-lg rounded-3xl border border-[color:var(--app-border)] bg-[var(--app-surface)] p-6 shadow-2xl">
+            <header>
+              <h2 className="text-2xl font-semibold tracking-tight text-[var(--app-fg)]">
+                Agregar integrante excepcional
+              </h2>
+              <p className="mt-2 text-sm leading-6 text-slate-600 dark:text-slate-400">
+                Esta opción permite llevar temporalmente el equipo a un máximo de 4 integrantes.
+              </p>
+            </header>
+
+            <form className="mt-6 grid gap-4" onSubmit={handleExtendTeam}>
+              <div>
+                <label className="mb-2 block text-sm font-medium text-slate-700 dark:text-slate-300">
+                  Estudiante disponible
+                </label>
+                <select
+                  value={extensionStudentId}
+                  onChange={(event) => setExtensionStudentId(event.target.value)}
+                  className="w-full rounded-2xl border border-[color:var(--app-border)] bg-[var(--app-surface-muted)] px-4 py-3 text-sm text-[var(--app-fg)] outline-none transition"
+                >
+                  <option value="">Selecciona un estudiante</option>
+                  {extensionCandidates.map((student) => (
+                    <option key={student.uid} value={student.uid}>
+                      {student.firstName} {student.lastName}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="rounded-2xl border border-[color:var(--app-border)] bg-[var(--app-surface-muted)] p-4 text-sm text-slate-600 dark:text-slate-400">
+                Equipo actual: <span className="font-medium text-[var(--app-fg)]">{teamToExtend.name}</span> · Capacidad resultante: {teamToExtend.memberIds.length + 1}/{EXCEPTION_TEAM_MEMBERS}
+              </div>
+
+              <div className="mt-2 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+                <button type="button" onClick={handleCloseExtendModal} disabled={isExtendingTeam} className={neutralActionButtonClass}>
+                  Cancelar
+                </button>
+                <button type="submit" disabled={isExtendingTeam} className={positiveActionButtonClass}>
+                  {isExtendingTeam ? 'Guardando...' : 'Agregar integrante'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       ) : null}

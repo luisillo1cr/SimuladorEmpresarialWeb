@@ -17,7 +17,6 @@ import {
   positiveActionButtonClass,
 } from '../utils/buttonStyles';
 
-
 type DashboardPageProps = {
   isDarkMode: boolean;
   onToggleTheme: () => void;
@@ -74,6 +73,56 @@ type MonthlyOperationRecord = {
   status: 'draft' | 'closed';
 };
 
+type ComplianceRequestRecord = {
+  id: string;
+  companyId: string;
+  companyName: string;
+  teamId: string;
+  teamName: string;
+  type: 'tax_registration' | 'municipal_patent';
+  mode: 'initial' | 'update' | 'renewal';
+  status: 'pending' | 'submitted' | 'approved' | 'rejected' | 'not_required';
+  legalRepresentative: string;
+  notes: string;
+  submittedAt: unknown;
+  reviewedAt: unknown;
+  reviewerComment: string;
+};
+
+type AdminRequestPreview = {
+  id: string;
+  companyName: string;
+  teamName: string;
+  label: string;
+  status: 'pending' | 'submitted' | 'approved' | 'rejected' | 'not_required';
+  submittedAt: unknown;
+};
+
+type AdminCompanyPreview = {
+  id: string;
+  tradeName: string;
+  teamName: string;
+  registrationStatus: CompanyRecord['formalRegistration']['registrationStatus'];
+  taxStatus: CompanyRecord['formalRegistration']['taxRegistrationStatus'];
+  patentStatus: CompanyRecord['formalRegistration']['municipalPatentStatus'];
+  latestNetResult: number | null;
+  latestPeriodLabel: string;
+};
+
+type TeamSummary = {
+  id: string;
+};
+
+type StaffUserSummary = {
+  role?: string;
+  status?: string;
+};
+
+type AdminOperationSummary = Pick<
+  MonthlyOperationRecord,
+  'id' | 'companyId' | 'teamId' | 'periodYear' | 'periodMonth' | 'periodLabel' | 'netResult' | 'status'
+>;
+
 type StaffSummary = {
   totalUsers: number;
   totalStudents: number;
@@ -81,6 +130,12 @@ type StaffSummary = {
   totalTeams: number;
   totalCompanies: number;
   totalOperations: number;
+  pendingCompliance: number;
+  companiesInReview: number;
+  companiesPending: number;
+  draftOperations: number;
+  closedOperations: number;
+  teamsWithoutCompany: number;
 };
 
 type InsightCard = {
@@ -118,7 +173,6 @@ type TrafficLightCardProps = TrafficSignalCard;
 type PeriodComparisonChartProps = {
   operation: MonthlyOperationRecord | null;
 };
-
 
 function isValidStudentJobTitle(value: unknown): value is StudentJobTitle {
   return (
@@ -929,7 +983,7 @@ function buildExecutiveSummary(
     title: 'Operación en marcha',
     description:
       'La empresa ya tiene actividad registrada y el período sigue abierto. Sigue alimentando datos útiles para que el análisis sea cada vez más real.',
-    tone: 'info' as AlertTone,
+      tone: 'info' as AlertTone,
   };
 }
 
@@ -1052,6 +1106,79 @@ function buildBusinessTrafficLights(
   ];
 }
 
+function getRequestTypeShortLabel(type: ComplianceRequestRecord['type']) {
+  return type === 'municipal_patent'
+    ? 'Patente municipal'
+    : 'Inscripción tributaria';
+}
+
+function getRequestModeShortLabel(mode: ComplianceRequestRecord['mode']) {
+  switch (mode) {
+    case 'update':
+      return 'Actualización';
+    case 'renewal':
+      return 'Renovación';
+    case 'initial':
+    default:
+      return 'Inicial';
+  }
+}
+
+function isPendingComplianceStatus(status: ComplianceRequestRecord['status']) {
+  return status === 'pending' || status === 'submitted';
+}
+
+function formatDateTime(value: unknown) {
+  if (
+    value &&
+    typeof value === 'object' &&
+    'toDate' in value &&
+    typeof (value as { toDate: () => Date }).toDate === 'function'
+  ) {
+    return (value as { toDate: () => Date }).toDate().toLocaleString('es-CR', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  }
+
+  return 'Pendiente';
+}
+
+function getAdminCompanyStatus(company: AdminCompanyPreview) {
+  if (company.registrationStatus === 'in_review') {
+    return {
+      badge: 'En revisión',
+      tone: 'warning' as SignalTone,
+      description: 'La empresa tiene trámites o validaciones todavía abiertas.',
+    };
+  }
+
+  if (company.registrationStatus === 'pending') {
+    return {
+      badge: 'Pendiente',
+      tone: 'neutral' as SignalTone,
+      description: 'La empresa aún no completa su formalización básica.',
+    };
+  }
+
+  if ((company.latestNetResult ?? 0) < 0) {
+    return {
+      badge: 'Riesgo operativo',
+      tone: 'danger' as SignalTone,
+      description: 'El último período registrado terminó con resultado negativo.',
+    };
+  }
+
+  return {
+    badge: 'Estable',
+    tone: 'success' as SignalTone,
+    description: 'La empresa está formalizada y sin señales operativas críticas.',
+  };
+}
+
 export function DashboardPage({
   isDarkMode,
   onToggleTheme,
@@ -1075,7 +1202,15 @@ export function DashboardPage({
     totalTeams: 0,
     totalCompanies: 0,
     totalOperations: 0,
+    pendingCompliance: 0,
+    companiesInReview: 0,
+    companiesPending: 0,
+    draftOperations: 0,
+    closedOperations: 0,
+    teamsWithoutCompany: 0,
   });
+  const [adminPendingRequests, setAdminPendingRequests] = useState<AdminRequestPreview[]>([]);
+  const [adminCompanySignals, setAdminCompanySignals] = useState<AdminCompanyPreview[]>([]);
 
   const handleLogout = async () => {
     await signOutUser();
@@ -1157,7 +1292,7 @@ export function DashboardPage({
                 companyData.formalRegistration?.registrationStatus === 'registered'
                   ? 'registered'
                   : companyData.formalRegistration?.registrationStatus ===
-                      'in_review'
+                    'in_review'
                     ? 'in_review'
                     : 'pending',
               taxRegistrationStatus:
@@ -1168,7 +1303,7 @@ export function DashboardPage({
                 companyData.formalRegistration?.municipalPatentStatus === 'active'
                   ? 'active'
                   : companyData.formalRegistration?.municipalPatentStatus ===
-                      'not_required'
+                    'not_required'
                     ? 'not_required'
                     : 'pending',
             },
@@ -1220,15 +1355,182 @@ export function DashboardPage({
 
           setStudentLatestOperation(nextOperations[0] ?? null);
         } else {
-          const [usersSnapshot, teamsSnapshot, companiesSnapshot, operationsSnapshot] =
+          const [usersSnapshot, teamsSnapshot, companiesSnapshot, operationsSnapshot, complianceSnapshot] =
             await Promise.all([
               getDocs(collection(db, 'users')),
               getDocs(collection(db, 'teams')),
               getDocs(collection(db, 'companies')),
               getDocs(collection(db, 'monthlyOperations')),
+              getDocs(collection(db, 'companyComplianceRequests')),
             ]);
 
-          const allUsers = usersSnapshot.docs.map((document) => document.data());
+          const allUsers: StaffUserSummary[] = usersSnapshot.docs.map((document) => {
+            const data = document.data();
+            return {
+              role: typeof data.role === 'string' ? data.role : undefined,
+              status: typeof data.status === 'string' ? data.status : undefined,
+            };
+          });
+
+          const allTeams: TeamSummary[] = teamsSnapshot.docs.map((document) => ({
+            id: document.id,
+          }));
+
+          const allCompanies: CompanyRecord[] = companiesSnapshot.docs.map(
+            (document): CompanyRecord => {
+              const data = document.data();
+
+              const registrationStatus: CompanyRecord['formalRegistration']['registrationStatus'] =
+                data.formalRegistration?.registrationStatus === 'registered'
+                  ? 'registered'
+                  : data.formalRegistration?.registrationStatus === 'in_review'
+                    ? 'in_review'
+                    : 'pending';
+
+              const taxRegistrationStatus: CompanyRecord['formalRegistration']['taxRegistrationStatus'] =
+                data.formalRegistration?.taxRegistrationStatus === 'active'
+                  ? 'active'
+                  : 'pending';
+
+              const municipalPatentStatus: CompanyRecord['formalRegistration']['municipalPatentStatus'] =
+                data.formalRegistration?.municipalPatentStatus === 'active'
+                  ? 'active'
+                  : data.formalRegistration?.municipalPatentStatus === 'not_required'
+                    ? 'not_required'
+                    : 'pending';
+
+              return {
+                id: document.id,
+                teamId: String(data.teamId ?? ''),
+                teamName: String(data.teamName ?? ''),
+                businessName: String(data.businessName ?? ''),
+                tradeName: String(data.tradeName ?? ''),
+                legalId: String(data.legalId ?? ''),
+                industry: String(data.industry ?? ''),
+                status: data.status === 'registered' ? 'registered' : 'draft',
+                formalRegistration: {
+                  legalRepresentative: String(
+                    data.formalRegistration?.legalRepresentative ?? ''
+                  ),
+                  registrationStatus,
+                  taxRegistrationStatus,
+                  municipalPatentStatus,
+                },
+              };
+            }
+          );
+
+          const allOperations: AdminOperationSummary[] = operationsSnapshot.docs.map(
+            (document): AdminOperationSummary => {
+              const data = document.data();
+              const status: MonthlyOperationRecord['status'] =
+                data.status === 'closed' ? 'closed' : 'draft';
+
+              return {
+                id: document.id,
+                companyId: String(data.companyId ?? ''),
+                teamId: String(data.teamId ?? ''),
+                periodYear: Number(data.periodYear ?? 0),
+                periodMonth: Number(data.periodMonth ?? 0),
+                periodLabel: String(data.periodLabel ?? ''),
+                netResult: Number(data.netResult ?? 0),
+                status,
+              };
+            }
+          );
+
+          const allRequests = complianceSnapshot.docs.map((document): ComplianceRequestRecord => {
+            const data = document.data();
+            return {
+              id: document.id,
+              companyId: String(data.companyId ?? ''),
+              companyName: String(data.companyName ?? ''),
+              teamId: String(data.teamId ?? ''),
+              teamName: String(data.teamName ?? ''),
+              type: data.type === 'municipal_patent' ? 'municipal_patent' : 'tax_registration',
+              mode: data.mode === 'update' ? 'update' : data.mode === 'renewal' ? 'renewal' : 'initial',
+              status:
+                data.status === 'approved' ||
+                data.status === 'rejected' ||
+                data.status === 'not_required' ||
+                data.status === 'submitted'
+                  ? data.status
+                  : 'pending',
+              legalRepresentative: String(data.legalRepresentative ?? ''),
+              notes: String(data.notes ?? ''),
+              submittedAt: data.submittedAt ?? null,
+              reviewedAt: data.reviewedAt ?? null,
+              reviewerComment: String(data.reviewerComment ?? ''),
+            };
+          });
+
+          const getMillis = (value: unknown) => {
+            if (
+              value &&
+              typeof value === 'object' &&
+              'toMillis' in value &&
+              typeof (value as { toMillis: () => number }).toMillis === 'function'
+            ) {
+              return (value as { toMillis: () => number }).toMillis();
+            }
+
+            return 0;
+          };
+
+          const latestOperationByCompany = new Map<string, { netResult: number; periodLabel: string }>();
+          for (const operation of allOperations.sort((a, b) => {
+            if (a.periodYear !== b.periodYear) {
+              return b.periodYear - a.periodYear;
+            }
+            return b.periodMonth - a.periodMonth;
+          })) {
+            if (!latestOperationByCompany.has(operation.companyId)) {
+              latestOperationByCompany.set(operation.companyId, {
+                netResult: operation.netResult,
+                periodLabel: operation.periodLabel,
+              });
+            }
+          }
+
+          const adminCompanies: AdminCompanyPreview[] = allCompanies.map((company) => ({
+            id: company.id,
+            tradeName: company.tradeName || 'Empresa sin nombre',
+            teamName: company.teamName || 'Equipo sin nombre',
+            registrationStatus: company.formalRegistration.registrationStatus,
+            taxStatus: company.formalRegistration.taxRegistrationStatus,
+            patentStatus: company.formalRegistration.municipalPatentStatus,
+            latestNetResult: latestOperationByCompany.get(company.id)?.netResult ?? null,
+            latestPeriodLabel: latestOperationByCompany.get(company.id)?.periodLabel ?? 'Sin período',
+          }));
+
+          const pendingRequests = allRequests
+            .filter((request) => isPendingComplianceStatus(request.status))
+            .sort((a, b) => getMillis(b.submittedAt) - getMillis(a.submittedAt));
+
+          setAdminPendingRequests(
+            pendingRequests.slice(0, 5).map((request) => ({
+              id: request.id,
+              companyName: request.companyName || 'Empresa sin nombre',
+              teamName: request.teamName || 'Equipo sin nombre',
+              label: `${getRequestTypeShortLabel(request.type)} · ${getRequestModeShortLabel(request.mode)}`,
+              status: request.status,
+              submittedAt: request.submittedAt,
+            }))
+          );
+
+          setAdminCompanySignals(
+            adminCompanies
+              .sort((a, b) => {
+                const score = (company: AdminCompanyPreview) => {
+                  if (company.registrationStatus === 'pending') return 0;
+                  if (company.registrationStatus === 'in_review') return 1;
+                  if ((company.latestNetResult ?? 0) < 0) return 2;
+                  return 3;
+                };
+                return score(a) - score(b);
+              })
+              .slice(0, 4)
+          );
 
           setStaffSummary({
             totalUsers: usersSnapshot.size,
@@ -1239,6 +1541,12 @@ export function DashboardPage({
             totalTeams: teamsSnapshot.size,
             totalCompanies: companiesSnapshot.size,
             totalOperations: operationsSnapshot.size,
+            pendingCompliance: pendingRequests.length,
+            companiesInReview: adminCompanies.filter((company) => company.registrationStatus === 'in_review').length,
+            companiesPending: adminCompanies.filter((company) => company.registrationStatus === 'pending').length,
+            draftOperations: allOperations.filter((operation) => operation.status === 'draft').length,
+            closedOperations: allOperations.filter((operation) => operation.status === 'closed').length,
+            teamsWithoutCompany: allTeams.filter((team) => !allCompanies.some((company) => company.teamId === team.id)).length,
           });
         }
       } catch (error) {
@@ -1684,72 +1992,63 @@ export function DashboardPage({
       ) : (
         <div className="space-y-6">
           <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-            <div className="rounded-3xl border border-[color:var(--app-border)] bg-[var(--app-surface)] p-5 shadow-sm">
-              <p className="text-sm text-slate-500 dark:text-slate-400">
-                Usuarios registrados
-              </p>
-              <p className="mt-2 text-2xl font-semibold text-[var(--app-fg)]">
-                {staffSummary.totalUsers}
-              </p>
-            </div>
-
-            <div className="rounded-3xl border border-[color:var(--app-border)] bg-[var(--app-surface)] p-5 shadow-sm">
-              <p className="text-sm text-slate-500 dark:text-slate-400">
-                Estudiantes activos
-              </p>
-              <p className="mt-2 text-2xl font-semibold text-[var(--app-fg)]">
-                {staffSummary.activeStudents}
-              </p>
-            </div>
-
-            <div className="rounded-3xl border border-[color:var(--app-border)] bg-[var(--app-surface)] p-5 shadow-sm">
-              <p className="text-sm text-slate-500 dark:text-slate-400">
-                Equipos creados
-              </p>
-              <p className="mt-2 text-2xl font-semibold text-[var(--app-fg)]">
-                {staffSummary.totalTeams}
-              </p>
-            </div>
-
-            <div className="rounded-3xl border border-[color:var(--app-border)] bg-[var(--app-surface)] p-5 shadow-sm">
-              <p className="text-sm text-slate-500 dark:text-slate-400">
-                Empresas registradas
-              </p>
-              <p className="mt-2 text-2xl font-semibold text-[var(--app-fg)]">
-                {staffSummary.totalCompanies}
-              </p>
-            </div>
+            <CompactMetricCard
+              title="Usuarios registrados"
+              value={String(staffSummary.totalUsers)}
+              helpText="Cantidad total de usuarios creados dentro del simulador."
+            />
+            <CompactMetricCard
+              title="Estudiantes activos"
+              value={String(staffSummary.activeStudents)}
+              helpText="Estudiantes con estado activo y listos para trabajar en sus equipos."
+            />
+            <CompactMetricCard
+              title="Solicitudes pendientes"
+              value={String(staffSummary.pendingCompliance)}
+              helpText="Trámites regulatorios que todavía esperan revisión docente."
+              valueClassName={staffSummary.pendingCompliance > 0 ? 'text-amber-700 dark:text-amber-300' : getDefaultValueClassName()}
+            />
+            <CompactMetricCard
+              title="Equipos sin empresa"
+              value={String(staffSummary.teamsWithoutCompany)}
+              helpText="Equipos creados que todavía no tienen una empresa asignada."
+              valueClassName={staffSummary.teamsWithoutCompany > 0 ? 'text-rose-700 dark:text-rose-300' : getDefaultValueClassName()}
+            />
           </section>
 
           <section className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
             <div className="rounded-3xl border border-[color:var(--app-border)] bg-[var(--app-surface)] p-6 shadow-sm">
               <header>
-                <h3 className="text-lg font-semibold">Resumen administrativo</h3>
+                <h3 className="text-lg font-semibold">Resumen administrativo útil</h3>
                 <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
-                  Vista general del simulador para gestión académica y operativa.
+                  Indicadores reales para saber qué requiere atención del docente ahora mismo.
                 </p>
               </header>
 
-              <div className="mt-5 grid gap-4 sm:grid-cols-2">
+              <div className="mt-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
                 <div className="rounded-2xl border border-[color:var(--app-border)] bg-[var(--app-surface-muted)] px-4 py-4">
-                  <p className="text-xs text-slate-500 dark:text-slate-400">
-                    Estudiantes registrados
-                  </p>
-                  <p className="mt-1.5 text-lg font-semibold text-[var(--app-fg)]">
-                    {staffSummary.totalStudents}
-                  </p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">Empresas en revisión</p>
+                  <p className="mt-1.5 text-lg font-semibold text-amber-700 dark:text-amber-300">{staffSummary.companiesInReview}</p>
                 </div>
-
                 <div className="rounded-2xl border border-[color:var(--app-border)] bg-[var(--app-surface-muted)] px-4 py-4">
-                  <p className="text-xs text-slate-500 dark:text-slate-400">
-                    Operaciones mensuales
-                  </p>
-                  <p className="mt-1.5 text-lg font-semibold text-[var(--app-fg)]">
-                    {staffSummary.totalOperations}
-                  </p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">Empresas pendientes</p>
+                  <p className="mt-1.5 text-lg font-semibold text-slate-700 dark:text-slate-200">{staffSummary.companiesPending}</p>
                 </div>
-
-                <div className="rounded-2xl border border-[color:var(--app-border)] bg-[var(--app-surface-muted)] px-4 py-4 sm:col-span-2">
+                <div className="rounded-2xl border border-[color:var(--app-border)] bg-[var(--app-surface-muted)] px-4 py-4">
+                  <p className="text-xs text-slate-500 dark:text-slate-400">Operaciones en borrador</p>
+                  <p className="mt-1.5 text-lg font-semibold text-sky-700 dark:text-sky-300">{staffSummary.draftOperations}</p>
+                </div>
+                <div className="rounded-2xl border border-[color:var(--app-border)] bg-[var(--app-surface-muted)] px-4 py-4">
+                  <p className="text-xs text-slate-500 dark:text-slate-400">Operaciones cerradas</p>
+                  <p className="mt-1.5 text-lg font-semibold text-emerald-700 dark:text-emerald-300">{staffSummary.closedOperations}</p>
+                </div>
+                <div className="rounded-2xl border border-[color:var(--app-border)] bg-[var(--app-surface-muted)] px-4 py-4">
+                  <p className="text-xs text-slate-500 dark:text-slate-400">Empresas activas</p>
+                  <p className="mt-1.5 text-lg font-semibold text-[var(--app-fg)]">{staffSummary.totalCompanies}</p>
+                </div>
+                <div className="rounded-2xl border border-[color:var(--app-border)] bg-[var(--app-surface-muted)] px-4 py-4">
+                  <p className="text-xs text-slate-500 dark:text-slate-400">Operaciones mensuales</p>
+                  <p className="mt-1.5 text-lg font-semibold text-[var(--app-fg)]">{staffSummary.totalOperations}</p>
                 </div>
               </div>
             </div>
@@ -1758,34 +2057,110 @@ export function DashboardPage({
               <header>
                 <h3 className="text-lg font-semibold">Acciones rápidas</h3>
                 <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
-                  Navega directo a los módulos administrativos clave.
+                  Navega directo a lo que más ocupa revisión administrativa.
                 </p>
               </header>
 
               <div className="mt-5 flex flex-col gap-3">
                 <button
                   type="button"
-                  onClick={() => navigate('/admin/users')}
-                  className={neutralActionButtonClass}
-                >
-                  Gestionar usuarios
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => navigate('/admin/teams')}
-                  className={neutralActionButtonClass}
-                >
-                  Gestionar equipos
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => navigate('/admin/companies')}
+                  onClick={() => navigate('/admin/compliance-requests')}
                   className={positiveActionButtonClass}
                 >
+                  Revisar solicitudes
+                </button>
+                <button type="button" onClick={() => navigate('/admin/companies')} className={neutralActionButtonClass}>
                   Gestionar empresas
                 </button>
+                <button type="button" onClick={() => navigate('/admin/teams')} className={neutralActionButtonClass}>
+                  Gestionar equipos
+                </button>
+                <button type="button" onClick={() => navigate('/admin/users')} className={neutralActionButtonClass}>
+                  Gestionar usuarios
+                </button>
+              </div>
+            </div>
+          </section>
+
+          <section className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_420px]">
+            <div className="rounded-3xl border border-[color:var(--app-border)] bg-[var(--app-surface)] p-6 shadow-sm">
+              <header className="flex items-start justify-between gap-4">
+                <div>
+                  <h3 className="text-lg font-semibold">Bandeja de revisión docente</h3>
+                  <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
+                    Solicitudes pendientes más recientes para resolver rápido.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => navigate('/admin/compliance-requests')}
+                  className={neutralActionButtonClass}
+                >
+                  Ver todas
+                </button>
+              </header>
+
+              <div className="mt-5 space-y-3">
+                {adminPendingRequests.length > 0 ? adminPendingRequests.map((request) => (
+                  <button
+                    key={request.id}
+                    type="button"
+                    onClick={() =>
+                      navigate(
+                        `/admin/compliance-requests?requestId=${encodeURIComponent(request.id)}`
+                      )
+                    }
+                    className="block w-full rounded-2xl border border-[color:var(--app-border)] bg-[var(--app-surface-muted)] px-4 py-4 text-left transition hover:bg-[var(--app-surface)]"
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="text-sm font-semibold text-[var(--app-fg)]">{request.companyName}</p>
+                      <span className="inline-flex rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-[11px] font-semibold text-amber-700 dark:border-amber-900/40 dark:bg-amber-950/40 dark:text-amber-300">Pendiente</span>
+                    </div>
+                    <p className="mt-2 text-xs font-medium uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">{request.label}</p>
+                    <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">Equipo: {request.teamName}</p>
+                    <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">Enviada: {formatDateTime(request.submittedAt)}</p>
+                  </button>
+                )) : (
+                  <div className="rounded-2xl border border-[color:var(--app-border)] bg-[var(--app-surface-muted)] px-4 py-4 text-sm text-slate-600 dark:text-slate-400">
+                    No hay solicitudes pendientes en este momento.
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="rounded-3xl border border-[color:var(--app-border)] bg-[var(--app-surface)] p-6 shadow-sm">
+              <header>
+                <h3 className="text-lg font-semibold">Empresas que ocupan atención</h3>
+                <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
+                  Vista rápida para detectar seguimiento legal u operativo.
+                </p>
+              </header>
+
+              <div className="mt-5 space-y-3">
+                {adminCompanySignals.length > 0 ? adminCompanySignals.map((company) => {
+                  const signal = getAdminCompanyStatus(company);
+                  const styles = getSignalStyles(signal.tone);
+                  return (
+                    <button
+                      key={company.id}
+                      type="button"
+                      onClick={() => navigate('/admin/companies')}
+                      className={['block w-full rounded-2xl border px-4 py-4 text-left transition hover:opacity-95', styles.card].join(' ')}
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="text-sm font-semibold text-[var(--app-fg)]">{company.tradeName}</p>
+                        <span className={['inline-flex rounded-full border px-2.5 py-1 text-[11px] font-semibold', styles.badge].join(' ')}>{signal.badge}</span>
+                      </div>
+                      <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">Equipo: {company.teamName}</p>
+                      <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">Último período: {company.latestPeriodLabel}</p>
+                      <p className="mt-2 text-sm leading-6 text-[var(--app-fg)]">{signal.description}</p>
+                    </button>
+                  );
+                }) : (
+                  <div className="rounded-2xl border border-[color:var(--app-border)] bg-[var(--app-surface-muted)] px-4 py-4 text-sm text-slate-600 dark:text-slate-400">
+                    Todavía no hay empresas para analizar en este panel.
+                  </div>
+                )}
               </div>
             </div>
           </section>

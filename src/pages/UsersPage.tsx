@@ -145,7 +145,6 @@ export function UsersPage({
   const [selectedUser, setSelectedUser] = useState<UserProfileWithJob | null>(null);
   const [formRole, setFormRole] = useState<UserRole>('student');
   const [formStatus, setFormStatus] = useState<UserStatus>('active');
-  const [formJobTitle, setFormJobTitle] = useState<StudentJobTitle>('unassigned');
   const [isSaving, setIsSaving] = useState(false);
 
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
@@ -250,11 +249,6 @@ export function UsersPage({
     setSelectedUser(targetUser);
     setFormRole(targetUser.role);
     setFormStatus(targetUser.status);
-    setFormJobTitle(
-      targetUser.role === 'student'
-        ? targetUser.jobTitle ?? 'unassigned'
-        : 'unassigned'
-    );
   };
 
   const handleCloseEdit = () => {
@@ -272,7 +266,7 @@ export function UsersPage({
 
     const nextRole = profile.role === 'admin' ? formRole : selectedUser.role;
     const nextStatus = formStatus;
-    const nextJobTitle = nextRole === 'student' ? formJobTitle : null;
+    const nextJobTitle = selectedUser.role === 'student' ? selectedUser.jobTitle ?? 'unassigned' : null;
 
     try {
       setIsSaving(true);
@@ -406,7 +400,7 @@ export function UsersPage({
     <>
       <AppShell
         title="Usuarios"
-        subtitle="Gestión de usuarios, roles, estado y puesto estudiantil."
+        subtitle="Gestión de usuarios, roles y estado general de acceso."
         isDarkMode={isDarkMode}
         onToggleTheme={onToggleTheme}
         onLogout={handleLogout}
@@ -417,8 +411,7 @@ export function UsersPage({
             <div className="min-w-0">
               <h2 className="text-lg font-semibold">Listado de usuarios</h2>
               <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
-                Visualiza usuarios registrados y asigna su puesto de trabajo cuando
-                sean estudiantes.
+                Visualiza usuarios registrados, controla sus roles y administra el estado de acceso del sistema.
               </p>
             </div>
 
@@ -444,28 +437,28 @@ export function UsersPage({
           ) : (
             <div className="overflow-hidden rounded-2xl border border-[color:var(--app-border)]">
               <div className="overflow-x-auto">
-                <table className="min-w-[980px] border-collapse">
+                <table className="w-max min-w-full border-collapse">
                   <thead className="bg-[var(--app-surface-muted)]">
                     <tr>
-                      <th className="px-4 py-4 text-left text-sm font-semibold text-slate-700 dark:text-slate-300">
+                      <th className="min-w-[220px] px-4 py-4 text-left text-sm font-semibold text-slate-700 dark:text-slate-300">
                         Nombre
                       </th>
-                      <th className="px-4 py-4 text-left text-sm font-semibold text-slate-700 dark:text-slate-300">
+                      <th className="min-w-[260px] px-4 py-4 text-left text-sm font-semibold text-slate-700 dark:text-slate-300">
                         Correo
                       </th>
-                      <th className="px-4 py-4 text-left text-sm font-semibold text-slate-700 dark:text-slate-300">
+                      <th className="min-w-[120px] px-4 py-4 text-left text-sm font-semibold text-slate-700 dark:text-slate-300">
                         Rol
                       </th>
-                      <th className="px-4 py-4 text-left text-sm font-semibold text-slate-700 dark:text-slate-300">
+                      <th className="min-w-[150px] px-4 py-4 text-left text-sm font-semibold text-slate-700 dark:text-slate-300">
                         Puesto
                       </th>
-                      <th className="px-4 py-4 text-left text-sm font-semibold text-slate-700 dark:text-slate-300">
+                      <th className="min-w-[120px] px-4 py-4 text-left text-sm font-semibold text-slate-700 dark:text-slate-300">
                         Estado
                       </th>
-                      <th className="px-4 py-4 text-left text-sm font-semibold text-slate-700 dark:text-slate-300">
+                      <th className="min-w-[160px] px-4 py-4 text-left text-sm font-semibold text-slate-700 dark:text-slate-300">
                         Equipo
                       </th>
-                      <th className="px-4 py-4 text-right text-sm font-semibold text-slate-700 dark:text-slate-300">
+                      <th className="w-[140px] min-w-[140px] px-4 py-4 text-right text-sm font-semibold text-slate-700 dark:text-slate-300">
                         Acción
                       </th>
                     </tr>
@@ -478,11 +471,11 @@ export function UsersPage({
                         className="border-t border-[color:var(--app-border)]"
                       >
                         <td className="px-4 py-4 text-sm text-[var(--app-fg)]">
-                          {user.firstName} {user.lastName}
+                          <div className="truncate">{user.firstName} {user.lastName}</div>
                         </td>
 
                         <td className="px-4 py-4 text-sm text-slate-600 dark:text-slate-400">
-                          {user.email}
+                          <div className="truncate">{user.email}</div>
                         </td>
 
                         <td className="px-4 py-4 text-sm">
@@ -525,10 +518,10 @@ export function UsersPage({
                         </td>
 
                         <td className="px-4 py-4 text-sm text-slate-600 dark:text-slate-400">
-                          {user.teamId ?? 'Sin asignar'}
+                          <div className="truncate">{user.teamId ?? 'Sin asignar'}</div>
                         </td>
 
-                        <td className="px-4 py-4 text-right">
+                        <td className="px-4 py-4 text-right whitespace-nowrap">
                           {canEditUser(user) ? (
                             <button
                               type="button"
@@ -559,7 +552,7 @@ export function UsersPage({
             <header className="mb-6">
               <h2 className="text-xl font-semibold">Editar usuario</h2>
               <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
-                Actualiza rol, estado y puesto del usuario seleccionado.
+                Actualiza rol y estado del usuario seleccionado. El puesto del estudiante ahora se gestiona desde la empresa asignada.
               </p>
             </header>
 
@@ -607,32 +600,13 @@ export function UsersPage({
               </div>
 
               {formRole === 'student' ? (
-                <div>
-                  <label
-                    htmlFor="jobTitle"
-                    className="mb-2 block text-sm font-medium text-slate-700 dark:text-slate-300"
-                  >
-                    Puesto de trabajo
-                  </label>
-                  <select
-                    id="jobTitle"
-                    value={formJobTitle}
-                    onChange={(event: ChangeEvent<HTMLSelectElement>) =>
-                      setFormJobTitle(event.target.value as StudentJobTitle)
-                    }
-                    disabled={isSaving}
-                    className="w-full rounded-2xl border border-[color:var(--app-border)] bg-[var(--app-surface-muted)] px-4 py-3 text-sm text-[var(--app-fg)] outline-none transition disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    {studentJobOptions.map((jobOption) => (
-                      <option key={jobOption} value={jobOption}>
-                        {getJobTitleLabel(jobOption)}
-                      </option>
-                    ))}
-                  </select>
-
+                <div className="rounded-2xl border border-[color:var(--app-border)] bg-[var(--app-surface-muted)] p-4">
+                  <p className="text-sm text-slate-500 dark:text-slate-400">Puesto del estudiante</p>
+                  <p className="mt-2 text-base font-medium">
+                    {getJobTitleLabel(selectedUser.jobTitle ?? 'unassigned')}
+                  </p>
                   <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
-                    Este puesto define qué métricas, alertas y prioridades verá el
-                    estudiante en su dashboard.
+                    Este dato ahora se administra desde el detalle de la empresa para que el puesto siempre quede ligado al contexto del equipo.
                   </p>
                 </div>
               ) : null}

@@ -1,3 +1,4 @@
+import { NotificationBell } from './NotificationBell';
 import { ThemeToggle } from '../ui/ThemeToggle';
 
 type TopbarProps = {
@@ -19,7 +20,7 @@ export function Topbar({
 }: TopbarProps) {
   return (
     <header className="sticky top-0 z-30 border-b border-[color:var(--app-border)] bg-white/72 backdrop-blur-xl dark:bg-[#2a2a2a]/72">
-      <div className="flex items-start justify-between gap-4 px-4 py-4 sm:px-6">
+      <div className="flex flex-col gap-4 px-4 py-4 sm:px-6 lg:flex-row lg:items-start lg:justify-between">
         <div className="flex min-w-0 items-start gap-3">
           <button
             type="button"
@@ -48,14 +49,16 @@ export function Topbar({
             </h1>
 
             {subtitle ? (
-              <p className="mt-1 max-w-3xl text-sm text-slate-600 dark:text-slate-400">
+              <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-600 dark:text-slate-400">
                 {subtitle}
               </p>
             ) : null}
           </div>
         </div>
 
-        <div className="flex shrink-0 items-center gap-3">
+        <div className="flex shrink-0 flex-wrap items-center justify-end gap-3">
+          <NotificationBell />
+
           {onOpenProfile ? (
             <button
               type="button"

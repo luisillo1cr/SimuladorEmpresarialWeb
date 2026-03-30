@@ -18,6 +18,7 @@ import {
   neutralActionButtonClass,
   positiveActionButtonClass,
 } from '../utils/buttonStyles';
+import { normalizePositiveNumberInput } from '../utils/numeric';
 
 type CompanyOperationsPageProps = {
   isDarkMode: boolean;
@@ -230,39 +231,12 @@ export function CompanyOperationsPage({
     rawValue: string,
     setter: React.Dispatch<React.SetStateAction<string>>
   ) => {
-    if (rawValue === '') {
-      setter('');
-      setMoneyFieldErrors((current) => ({
-        ...current,
-        [field]: '',
-      }));
-      return;
-    }
+    const normalized = normalizePositiveNumberInput(rawValue);
 
-    const numericValue = Number(rawValue);
-
-    if (!Number.isFinite(numericValue)) {
-      setter('0');
-      setMoneyFieldErrors((current) => ({
-        ...current,
-        [field]: 'Solo se permiten números válidos. El monto fue ajustado a 0.',
-      }));
-      return;
-    }
-
-    if (numericValue < 0) {
-      setter('0');
-      setMoneyFieldErrors((current) => ({
-        ...current,
-        [field]: 'No se permiten montos negativos. El mínimo es 0.',
-      }));
-      return;
-    }
-
-    setter(rawValue);
+    setter(normalized.value);
     setMoneyFieldErrors((current) => ({
       ...current,
-      [field]: '',
+      [field]: normalized.error,
     }));
   };
 
@@ -694,7 +668,8 @@ export function CompanyOperationsPage({
                     />
                     <input
                       id="openingCash"
-                      type="number"
+                      type="text"
+                      inputMode="decimal"
                       min={0}
                       value={openingCash}
                       onChange={(event) =>
@@ -722,7 +697,8 @@ export function CompanyOperationsPage({
                     />
                     <input
                       id="salesIncome"
-                      type="number"
+                      type="text"
+                      inputMode="decimal"
                       min={0}
                       value={salesIncome}
                       onChange={(event) =>
@@ -750,7 +726,8 @@ export function CompanyOperationsPage({
                     />
                     <input
                       id="serviceIncome"
-                      type="number"
+                      type="text"
+                      inputMode="decimal"
                       min={0}
                       value={serviceIncome}
                       onChange={(event) =>
@@ -778,7 +755,8 @@ export function CompanyOperationsPage({
                     />
                     <input
                       id="otherIncome"
-                      type="number"
+                      type="text"
+                      inputMode="decimal"
                       min={0}
                       value={otherIncome}
                       onChange={(event) =>
@@ -806,7 +784,8 @@ export function CompanyOperationsPage({
                     />
                     <input
                       id="operatingExpenses"
-                      type="number"
+                      type="text"
+                      inputMode="decimal"
                       min={0}
                       value={operatingExpenses}
                       onChange={(event) =>
@@ -834,7 +813,8 @@ export function CompanyOperationsPage({
                     />
                     <input
                       id="payrollExpenses"
-                      type="number"
+                      type="text"
+                      inputMode="decimal"
                       min={0}
                       value={payrollExpenses}
                       onChange={(event) =>
@@ -862,7 +842,8 @@ export function CompanyOperationsPage({
                     />
                     <input
                       id="rentUtilitiesExpenses"
-                      type="number"
+                      type="text"
+                      inputMode="decimal"
                       min={0}
                       value={rentUtilitiesExpenses}
                       onChange={(event) =>
@@ -890,7 +871,8 @@ export function CompanyOperationsPage({
                     />
                     <input
                       id="simplifiedTax"
-                      type="number"
+                      type="text"
+                      inputMode="decimal"
                       min={0}
                       value={simplifiedTax}
                       onChange={(event) =>

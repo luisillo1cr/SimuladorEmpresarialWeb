@@ -1,6 +1,8 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { Sidebar } from './Sidebar';
 import { Topbar } from './Topbar';
+import { TeamChatDock } from '../chat/TeamChatDock';
+import { BackToTopButton } from './BackToTopButton';
 
 type AppShellProps = {
   title: string;
@@ -31,8 +33,25 @@ export function AppShell({
     };
 
     window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
+
+    return () => {
+      window.removeEventListener('resize', handleResize);
+    };
   }, []);
+
+  useEffect(() => {
+    const originalOverflow = document.body.style.overflow;
+
+    if (isSidebarOpen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = originalOverflow || '';
+    }
+
+    return () => {
+      document.body.style.overflow = originalOverflow || '';
+    };
+  }, [isSidebarOpen]);
 
   return (
     <div className="min-h-screen bg-[var(--app-bg)] text-[var(--app-fg)]">
@@ -67,6 +86,9 @@ export function AppShell({
           </main>
         </div>
       </div>
+
+      <BackToTopButton />
+      <TeamChatDock />
     </div>
   );
 }

@@ -9,6 +9,9 @@ import { CompanyDetailPage } from '../../pages/CompanyDetailPage';
 import { MyCompanyPage } from '../../pages/MyCompanyPage';
 import { CompanyOperationsPage } from '../../pages/CompanyOperationsPage';
 import { CompleteSigninPage } from '../../pages/CompleteSigninPage';
+import { EmployeesPage } from '../../pages/EmployeesPage';
+import { ComplianceRequestsPage } from '../../pages/ComplianceRequestsPage';
+import { PayrollPage } from '../../pages/PayrollPage';
 import { ProtectedRoute } from './ProtectedRoute';
 import { PublicRoute } from './PublicRoute';
 import { RoleRoute } from './RoleRoute';
@@ -123,6 +126,36 @@ export function AppRouter({
           path="/admin/companies/:companyId"
           element={
             <CompanyDetailPage
+              isDarkMode={isDarkMode}
+              onToggleTheme={onToggleTheme}
+            />
+          }
+        />
+
+        <Route
+          path="/admin/employees"
+          element={
+            <EmployeesPage
+              isDarkMode={isDarkMode}
+              onToggleTheme={onToggleTheme}
+            />
+          }
+        />
+
+        <Route
+          path="/admin/compliance-requests"
+          element={
+            <ComplianceRequestsPage
+              isDarkMode={isDarkMode}
+              onToggleTheme={onToggleTheme}
+            />
+          }
+        />
+
+        <Route
+          path="/admin/payroll"
+          element={
+            <PayrollPage
               isDarkMode={isDarkMode}
               onToggleTheme={onToggleTheme}
             />
